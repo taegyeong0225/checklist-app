@@ -1,251 +1,163 @@
-// IndexedDB 유틸리티 - 모든 데이터를 로컬 기기에 저장
 import { DEFAULT_MASTER_TEMPLATE } from './defaultTemplate';
+import { supabase } from '../lib/supabase';
 
-const DB_NAME = 'ChecklistDB';
-const DB_VERSION = 2; // 폴더(메인 설비 그룹) 지원을 위해 v2 업그레이드
-
-const STORES = {
-  TEMPLATES: 'templates',
-  FOLDERS: 'folders',          // 메인 설비 폴더/그룹 (예: SFA GEN2 FCM 3호기)
-  EQUIPMENTS: 'equipments',    // 단위 설비 (folderId 소속 또는 단독 설비)
-  CHECKLISTS: 'checklists',    // 설비별 체크리스트
-  RESULTS: 'results',          // 점검 결과
-  PHOTOS: 'photos',            // 현장 사진
-};
-
-let db = null;
-
-export function openDB() {
-  return new Promise((resolve, reject) => {
-    if (db) { resolve(db); return; }
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-
-    req.onupgradeneeded = (e) => {
-      const d = e.target.result;
-
-      if (!d.objectStoreNames.contains(STORES.TEMPLATES)) {
-        const ts = d.createObjectStore(STORES.TEMPLATES, { keyPath: 'id', autoIncrement: true });
-        ts.createIndex('version', 'version', { unique: false });
-      }
-
-      if (!d.objectStoreNames.contains(STORES.FOLDERS)) {
-        const fs = d.createObjectStore(STORES.FOLDERS, { keyPath: 'id', autoIncrement: true });
-        fs.createIndex('name', 'name', { unique: false });
-        fs.createIndex('line', 'line', { unique: false });
-      }
-
-      if (!d.objectStoreNames.contains(STORES.EQUIPMENTS)) {
-        const es = d.createObjectStore(STORES.EQUIPMENTS, { keyPath: 'id', autoIncrement: true });
-        es.createIndex('name', 'name', { unique: false });
-        es.createIndex('line', 'line', { unique: false });
-        es.createIndex('folderId', 'folderId', { unique: false });
-      } else {
-        const es = req.transaction.objectStore(STORES.EQUIPMENTS);
-        if (!es.indexNames.contains('folderId')) {
-          es.createIndex('folderId', 'folderId', { unique: false });
-        }
-      }
-
-      if (!d.objectStoreNames.contains(STORES.CHECKLISTS)) {
-        const cs = d.createObjectStore(STORES.CHECKLISTS, { keyPath: 'id', autoIncrement: true });
-        cs.createIndex('equipmentId', 'equipmentId', { unique: false });
-        cs.createIndex('templateId', 'templateId', { unique: false });
-      }
-
-      if (!d.objectStoreNames.contains(STORES.RESULTS)) {
-        const rs = d.createObjectStore(STORES.RESULTS, { keyPath: 'id', autoIncrement: true });
-        rs.createIndex('checklistId', 'checklistId', { unique: false });
-        rs.createIndex('itemId', 'itemId', { unique: false });
-      }
-
-      if (!d.objectStoreNames.contains(STORES.PHOTOS)) {
-        const ps = d.createObjectStore(STORES.PHOTOS, { keyPath: 'id', autoIncrement: true });
-        ps.createIndex('resultId', 'resultId', { unique: false });
-      }
-    };
-
-    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
-    req.onerror = (e) => reject(e.target.error);
-  });
+function client() {
+  if (!supabase) throw new Error('Supabase 연결 설정이 없습니다.');
+  return supabase;
 }
 
-function txStore(storeName, mode = 'readonly') {
-  return db.transaction(storeName, mode).objectStore(storeName);
+function throwIfError(error) {
+  if (error) throw error;
 }
 
-function promReq(req) {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+function markLocalWrite() {
+  window.__checklistLastWriteAt = Date.now();
 }
 
-function getAll(storeName, indexName, value) {
-  return openDB().then(() => {
-    const store = txStore(storeName, 'readonly');
-    if (indexName && value !== undefined) {
-      return promReq(store.index(indexName).getAll(value));
-    }
-    return promReq(store.getAll());
-  });
+function baseRecord(row) {
+  return { id: row.id, ...row.data, createdAt: row.created_at };
 }
 
-function getById(storeName, id) {
-  return openDB().then(() => promReq(txStore(storeName, 'readonly').get(id)));
+function dataOnly(record, excluded = []) {
+  const copy = { ...record };
+  ['id', 'createdAt', ...excluded].forEach((key) => delete copy[key]);
+  return copy;
 }
 
-function add(storeName, data) {
-  return openDB().then(() => promReq(txStore(storeName, 'readwrite').add(data)));
+async function getAll(table, map = baseRecord) {
+  const { data, error } = await client().from(table).select('*').order('created_at');
+  throwIfError(error);
+  return data.map(map);
 }
 
-function put(storeName, data) {
-  return openDB().then(() => promReq(txStore(storeName, 'readwrite').put(data)));
+async function getById(table, id, map = baseRecord) {
+  const { data, error } = await client().from(table).select('*').eq('id', id).maybeSingle();
+  throwIfError(error);
+  return data ? map(data) : undefined;
 }
 
-function del(storeName, id) {
-  return openDB().then(() => promReq(txStore(storeName, 'readwrite').delete(id)));
+async function insert(table, payload, map = baseRecord) {
+  const { data, error } = await client().from(table).insert(payload).select().single();
+  throwIfError(error);
+  markLocalWrite();
+  return map(data);
 }
 
-// ───── Templates ─────
+async function update(table, id, payload, map = baseRecord) {
+  const { data, error } = await client().from(table).update(payload).eq('id', id).select().single();
+  throwIfError(error);
+  markLocalWrite();
+  return map(data);
+}
+
+async function remove(table, id) {
+  const { error } = await client().from(table).delete().eq('id', id);
+  throwIfError(error);
+  markLocalWrite();
+}
+
+const mapEquipment = (row) => ({ ...baseRecord(row), folderId: row.folder_id });
+const mapChecklist = (row) => ({ ...baseRecord(row), equipmentId: row.equipment_id, templateId: row.template_id });
+const mapResult = (row) => ({ ...baseRecord(row), checklistId: row.checklist_id, itemId: row.item_id, updatedAt: row.updated_at });
+const mapPhoto = (row) => ({ ...baseRecord(row), resultId: row.result_id });
+
 export const templateDB = {
   getAll: async () => {
-    const list = await getAll(STORES.TEMPLATES);
-    if (!list || list.length === 0) {
-      const id = await add(STORES.TEMPLATES, {
-        ...DEFAULT_MASTER_TEMPLATE,
-        createdAt: new Date().toISOString(),
-      });
-      const initial = await getById(STORES.TEMPLATES, id);
-      return [initial];
-    }
-    return list;
+    const templates = await getAll('templates');
+    if (templates.length > 0) return templates;
+    await templateDB.add(DEFAULT_MASTER_TEMPLATE);
+    return getAll('templates');
   },
-  getById: (id) => getById(STORES.TEMPLATES, id),
-  add: (data) => add(STORES.TEMPLATES, { ...data, createdAt: new Date().toISOString() }),
-  put: (data) => put(STORES.TEMPLATES, data),
-  delete: (id) => del(STORES.TEMPLATES, id),
+  getById: (id) => getById('templates', id),
+  add: async (record) => (await insert('templates', { data: dataOnly(record) })).id,
+  put: (record) => update('templates', record.id, { data: dataOnly(record) }),
+  delete: (id) => remove('templates', id),
 };
 
-// ───── Folders (메인 설비 그룹) ─────
 export const folderDB = {
-  getAll: () => getAll(STORES.FOLDERS),
-  getById: (id) => getById(STORES.FOLDERS, id),
-  add: (data) => add(STORES.FOLDERS, { ...data, createdAt: new Date().toISOString() }),
-  put: (data) => put(STORES.FOLDERS, data),
-  delete: async (id) => {
-    // 소속된 하위 설비들의 folderId를 null로 해제
-    const eqs = await getAll(STORES.EQUIPMENTS);
-    for (const eq of eqs) {
-      if (eq.folderId === id) {
-        await put(STORES.EQUIPMENTS, { ...eq, folderId: null });
-      }
-    }
-    return del(STORES.FOLDERS, id);
-  },
+  getAll: () => getAll('folders'),
+  getById: (id) => getById('folders', id),
+  add: async (record) => (await insert('folders', { data: dataOnly(record) })).id,
+  put: (record) => update('folders', record.id, { data: dataOnly(record) }),
+  delete: (id) => remove('folders', id),
 };
 
-// ───── Equipments (단위 설비) ─────
 export const equipmentDB = {
-  getAll: () => getAll(STORES.EQUIPMENTS),
-  getByFolderId: (folderId) => getAll(STORES.EQUIPMENTS, 'folderId', folderId),
-  getById: (id) => getById(STORES.EQUIPMENTS, id),
-  add: (data) => add(STORES.EQUIPMENTS, { ...data, createdAt: new Date().toISOString() }),
-  put: (data) => put(STORES.EQUIPMENTS, data),
-  delete: async (id) => {
-    // 체크리스트 및 결과 삭제
-    const cls = await checklistDB.getByEquipmentId(id);
-    for (const cl of cls) {
-      await checklistDB.delete(cl.id);
-    }
-    return del(STORES.EQUIPMENTS, id);
-  },
+  getAll: () => getAll('equipments', mapEquipment),
+  getByFolderId: async (folderId) => (await getAll('equipments', mapEquipment)).filter((item) => item.folderId === folderId),
+  getById: (id) => getById('equipments', id, mapEquipment),
+  add: async (record) => (await insert('equipments', {
+    folder_id: record.folderId || null,
+    data: dataOnly(record, ['folderId']),
+  }, mapEquipment)).id,
+  put: (record) => update('equipments', record.id, {
+    folder_id: record.folderId || null,
+    data: dataOnly(record, ['folderId']),
+  }, mapEquipment),
+  delete: (id) => remove('equipments', id),
 };
 
-// ───── Checklists ─────
 export const checklistDB = {
-  getAll: () => getAll(STORES.CHECKLISTS),
-  getByEquipmentId: (equipmentId) => getAll(STORES.CHECKLISTS, 'equipmentId', equipmentId),
-  getById: (id) => getById(STORES.CHECKLISTS, id),
-  add: (data) => add(STORES.CHECKLISTS, { ...data, createdAt: new Date().toISOString() }),
-  put: (data) => put(STORES.CHECKLISTS, data),
-  delete: async (id) => {
-    const rs = await resultDB.getByChecklistId(id);
-    for (const r of rs) {
-      await resultDB.delete(r.id);
-    }
-    return del(STORES.CHECKLISTS, id);
-  },
+  getAll: () => getAll('checklists', mapChecklist),
+  getByEquipmentId: async (equipmentId) => (await getAll('checklists', mapChecklist)).filter((item) => item.equipmentId === equipmentId),
+  getById: (id) => getById('checklists', id, mapChecklist),
+  add: async (record) => (await insert('checklists', {
+    equipment_id: record.equipmentId,
+    template_id: record.templateId || null,
+    data: dataOnly(record, ['equipmentId', 'templateId']),
+  }, mapChecklist)).id,
+  put: (record) => update('checklists', record.id, {
+    equipment_id: record.equipmentId,
+    template_id: record.templateId || null,
+    data: dataOnly(record, ['equipmentId', 'templateId']),
+  }, mapChecklist),
+  delete: (id) => remove('checklists', id),
 };
 
-// ───── Results ─────
 export const resultDB = {
-  getAll: () => getAll(STORES.RESULTS),
-  getByChecklistId: (checklistId) => getAll(STORES.RESULTS, 'checklistId', checklistId),
-  getById: (id) => getById(STORES.RESULTS, id),
-  add: (data) => add(STORES.RESULTS, { ...data, updatedAt: new Date().toISOString() }),
-  put: (data) => put(STORES.RESULTS, { ...data, updatedAt: new Date().toISOString() }),
-  delete: async (id) => {
-    const ps = await photoDB.getByResultId(id);
-    for (const p of ps) {
-      await photoDB.delete(p.id);
-    }
-    return del(STORES.RESULTS, id);
+  getAll: () => getAll('results', mapResult),
+  getByChecklistId: async (checklistId) => (await getAll('results', mapResult)).filter((item) => item.checklistId === checklistId),
+  getById: (id) => getById('results', id, mapResult),
+  upsert: async (checklistId, itemId, record) => {
+    const { data, error } = await client().from('results').upsert({
+      checklist_id: checklistId,
+      item_id: String(itemId),
+      data: dataOnly(record, ['checklistId', 'itemId', 'updatedAt']),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'checklist_id,item_id' }).select().single();
+    throwIfError(error);
+    markLocalWrite();
+    return data.id;
   },
-  upsert: async (checklistId, itemId, data) => {
-    await openDB();
-    const all = await getAll(STORES.RESULTS, 'checklistId', checklistId);
-    const existing = all.find((r) => String(r.itemId) === String(itemId));
-    const record = {
-      ...data,
-      checklistId,
-      itemId,
-      updatedAt: new Date().toISOString(),
-    };
-    if (existing) {
-      record.id = existing.id;
-      record.createdAt = existing.createdAt;
-      return put(STORES.RESULTS, record);
-    }
-    record.createdAt = new Date().toISOString();
-    return add(STORES.RESULTS, record);
-  },
+  delete: (id) => remove('results', id),
 };
 
-// ───── Photos ─────
 export const photoDB = {
-  getByResultId: (resultId) => getAll(STORES.PHOTOS, 'resultId', resultId),
-  add: (data) => add(STORES.PHOTOS, { ...data, createdAt: new Date().toISOString() }),
-  delete: (id) => del(STORES.PHOTOS, id),
+  getByResultId: async (resultId) => (await getAll('photos', mapPhoto)).filter((item) => item.resultId === resultId),
+  add: async (record) => (await insert('photos', { result_id: record.resultId, data: dataOnly(record, ['resultId']) }, mapPhoto)).id,
+  delete: (id) => remove('photos', id),
 };
 
-// ───── Backup / Restore ─────
 export async function exportAllData() {
-  await openDB();
   const [templates, folders, equipments, checklists, results, photos] = await Promise.all([
-    getAll(STORES.TEMPLATES),
-    getAll(STORES.FOLDERS),
-    getAll(STORES.EQUIPMENTS),
-    getAll(STORES.CHECKLISTS),
-    getAll(STORES.RESULTS),
-    getAll(STORES.PHOTOS),
+    templateDB.getAll(), folderDB.getAll(), equipmentDB.getAll(), checklistDB.getAll(), resultDB.getAll(), getAll('photos', mapPhoto),
   ]);
   return { templates, folders, equipments, checklists, results, photos, exportedAt: new Date().toISOString() };
 }
 
 export async function importAllData(backup) {
-  await openDB();
-  const stores = [
-    [STORES.TEMPLATES, backup.templates],
-    [STORES.FOLDERS, backup.folders],
-    [STORES.EQUIPMENTS, backup.equipments],
-    [STORES.CHECKLISTS, backup.checklists],
-    [STORES.RESULTS, backup.results],
-    [STORES.PHOTOS, backup.photos],
+  const records = [
+    ['templates', backup.templates, (item) => ({ id: item.id, data: dataOnly(item) })],
+    ['folders', backup.folders, (item) => ({ id: item.id, data: dataOnly(item) })],
+    ['equipments', backup.equipments, (item) => ({ id: item.id, folder_id: item.folderId || null, data: dataOnly(item, ['folderId']) })],
+    ['checklists', backup.checklists, (item) => ({ id: item.id, equipment_id: item.equipmentId, template_id: item.templateId || null, data: dataOnly(item, ['equipmentId', 'templateId']) })],
+    ['results', backup.results, (item) => ({ id: item.id, checklist_id: item.checklistId, item_id: String(item.itemId), data: dataOnly(item, ['checklistId', 'itemId', 'updatedAt']) })],
+    ['photos', backup.photos, (item) => ({ id: item.id, result_id: item.resultId, data: dataOnly(item, ['resultId']) })],
   ];
-  for (const [storeName, records] of stores) {
-    if (!records) continue;
-    for (const rec of records) {
-      await put(storeName, rec);
-    }
+  for (const [table, items, map] of records) {
+    if (!items?.length) continue;
+    const { error } = await client().from(table).upsert(items.map(map));
+    throwIfError(error);
   }
+  markLocalWrite();
 }

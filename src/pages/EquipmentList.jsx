@@ -159,7 +159,7 @@ export default function EquipmentList() {
   }
 
   // ───── 단위 설비 모달 처리 ─────
-  const activeTemplate = templates.find((t) => t.id === Number(eqForm.templateId)) || templates[0];
+  const activeTemplate = templates.find((t) => t.id === eqForm.templateId) || templates[0];
 
   function openAddEquipment(presetFolderId = currentFolderId) {
     setEditEqItem(null);
@@ -187,7 +187,7 @@ export default function EquipmentList() {
 
   function openEditEquipment(eq) {
     setEditEqItem(eq);
-    const defTpl = templates.find((t) => t.id === Number(eq.templateId)) || templates[0];
+    const defTpl = templates.find((t) => t.id === eq.templateId) || templates[0];
     let incCats = eq.includedCategories;
     let incIds = eq.includedItemIds;
 
@@ -715,7 +715,7 @@ export default function EquipmentList() {
               <select
                 className="form-select"
                 value={eqForm.folderId || ''}
-                onChange={(e) => setEqForm({ ...eqForm, folderId: e.target.value ? Number(e.target.value) : null })}
+                onChange={(e) => setEqForm({ ...eqForm, folderId: e.target.value || null })}
               >
                 <option value="">- 단독 설비 (폴더 없음) -</option>
                 {folders.map((f) => (

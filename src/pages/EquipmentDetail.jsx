@@ -4,11 +4,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { equipmentDB, checklistDB, resultDB, templateDB } from '../utils/db';
 import { calcProgress, formatDateTime } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
-import { ArrowLeft, ClipboardList, Plus, ExternalLink, Pencil, CheckSquare, Square, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, ClipboardList, Plus, ExternalLink, Pencil, CheckSquare, Square, Copy } from 'lucide-react';
 
 export default function EquipmentDetail() {
   const { id } = useParams();
-  const eqId = Number(id);
+  const eqId = id;
   const navigate = useNavigate();
   const addToast = useToast();
 
@@ -18,6 +18,9 @@ export default function EquipmentDetail() {
   const [checklistStats, setChecklistStats] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [selTemplate, setSelTemplate] = useState('');
+  const [allEquipments, setAllEquipments] = useState([]);
+  const [copySource, setCopySource] = useState(null);
+  const [copyTargetId, setCopyTargetId] = useState('');
 
   // 설비 수정 모달 상태
   const [showEditModal, setShowEditModal] = useState(false);
@@ -27,14 +30,16 @@ export default function EquipmentDetail() {
   useEffect(() => { load(); }, [eqId]);
 
   async function load() {
-    const [eq, cls, tpls] = await Promise.all([
+    const [eq, cls, tpls, equipments] = await Promise.all([
       equipmentDB.getById(eqId),
       checklistDB.getByEquipmentId(eqId),
       templateDB.getAll(),
+      equipmentDB.getAll(),
     ]);
     setEquipment(eq);
     setChecklists(cls);
     setTemplates(tpls);
+    setAllEquipments(equipments);
 
     if (tpls && tpls.length > 0 && !selTemplate) {
       setSelTemplate(String(tpls[0].id));
@@ -50,7 +55,7 @@ export default function EquipmentDetail() {
   }
 
   function openEditEquipment() {
-    const defTpl = templates.find((t) => t.id === Number(equipment.templateId)) || templates[0];
+    const defTpl = templates.find((t) => t.id === equipment.templateId) || templates[0];
     let incCats = equipment.includedCategories;
     let incIds = equipment.includedItemIds;
 
@@ -85,7 +90,7 @@ export default function EquipmentDetail() {
 
   async function handleCreateChecklist() {
     if (!selTemplate) { addToast('템플릿을 선택하세요.', 'error'); return; }
-    const tpl = templates.find((t) => t.id === Number(selTemplate));
+    const tpl = templates.find((t) => t.id === selTemplate);
     if (!tpl) return;
 
     // 설비에 지정된 포함 카테고리 필터링
@@ -122,7 +127,32 @@ export default function EquipmentDetail() {
 
   if (!equipment) return <div style={{ padding: 24 }}>불러오는 중...</div>;
 
-  const activeTemplate = templates.find((t) => t.id === Number(editForm?.templateId)) || templates[0];
+  function openCopyChecklist(checklist) {
+    setCopySource(checklist);
+    setCopyTargetId('');
+  }
+
+  async function handleCopyChecklist() {
+    if (!copyTargetId || !copySource) {
+      addToast('복사할 대상 설비를 선택하세요.', 'error');
+      return;
+    }
+    const newChecklist = {
+      equipmentId: copyTargetId,
+      templateId: copySource.templateId,
+      templateVersion: copySource.templateVersion,
+      templateName: copySource.templateName,
+      categories: JSON.parse(JSON.stringify(copySource.categories || [])),
+      copiedFromChecklistId: copySource.id,
+      createdAt: new Date().toISOString(),
+    };
+    await checklistDB.add(newChecklist);
+    const target = allEquipments.find((item) => item.id === copyTargetId);
+    addToast(`${target?.name || '대상 설비'}에 미점검 체크리스트를 복사했습니다.`, 'success');
+    setCopySource(null);
+  }
+
+  const activeTemplate = templates.find((t) => t.id === editForm?.templateId) || templates[0];
 
   function toggleAllEditCategories(selectAll) {
     if (!activeTemplate) return;
@@ -257,12 +287,17 @@ export default function EquipmentDetail() {
                     <td>{ng > 0 ? <span className="badge badge-ng">{ng}</span> : '-'}</td>
                     <td>{pending > 0 ? <span className="badge badge-pending">{pending}</span> : (pct === 100 ? <span className="badge badge-ok">완료</span> : '-')}</td>
                     <td>
-                      <button
-                        className="btn btn-primary btn-sm"
-                        onClick={() => navigate(`/equipments/${eqId}/checklist/${cl.id}`)}
-                      >
-                        <ExternalLink size={13} /> 점검
-                      </button>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => navigate(`/equipments/${eqId}/checklist/${cl.id}`)}
+                        >
+                          <ExternalLink size={13} /> 점검
+                        </button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => openCopyChecklist(cl)}>
+                          <Copy size={13} /> 복사
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -271,6 +306,33 @@ export default function EquipmentDetail() {
           </div>
         )}
       </div>
+
+      {copySource && (
+        <div className="modal-overlay" onClick={() => setCopySource(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">체크리스트 복사</span>
+              <button className="modal-close" onClick={() => setCopySource(null)}>×</button>
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+              항목과 확인 기준만 복사합니다. 정상/이상, 측정값, 비고, 확인자 결과는 복사하지 않아 모두 미점검으로 시작합니다.
+            </p>
+            <div className="form-group" style={{ marginTop: 16 }}>
+              <label className="form-label">대상 설비 *</label>
+              <select className="form-select" value={copyTargetId} onChange={(e) => setCopyTargetId(e.target.value)}>
+                <option value="">설비 선택</option>
+                {allEquipments.filter((item) => item.id !== eqId).map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}{item.line ? ` · ${item.line}` : ''}</option>
+                ))}
+              </select>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setCopySource(null)}>취소</button>
+              <button className="btn btn-primary" onClick={handleCopyChecklist} disabled={!copyTargetId}>미점검으로 복사</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal: 체크리스트 생성 */}
       {showModal && (
