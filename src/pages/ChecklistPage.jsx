@@ -1,0 +1,461 @@
+// 점검 화면 - 핵심 페이지 (최신 템플릿 자동 동기화 지원)
+import { useEffect, useState, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { equipmentDB, checklistDB, resultDB, photoDB, templateDB } from '../utils/db';
+import { calcProgress, formatDateTime, syncChecklistWithTemplate } from '../utils/helpers';
+import { exportChecklistToExcel } from '../utils/excel';
+import { useToast } from '../components/ToastProvider';
+import {
+  ArrowLeft, Download, ChevronDown, ChevronRight,
+  Camera, Trash2, Filter, AlertTriangle, RefreshCw, Sparkles
+} from 'lucide-react';
+
+const STATUS_OPTIONS = [
+  { value: 'ok',      label: '정상',    cls: 'ok' },
+  { value: 'ng',      label: '이상',    cls: 'ng' },
+  { value: 'na',      label: '해당없음', cls: 'na' },
+  { value: 'pending', label: '미점검',  cls: 'pending' },
+];
+
+export default function ChecklistPage() {
+  const { equipmentId, checklistId } = useParams();
+  const eqId = Number(equipmentId);
+  const clId = Number(checklistId);
+  const navigate = useNavigate();
+  const addToast = useToast();
+
+  const [equipment, setEquipment] = useState(null);
+  const [checklist, setChecklist] = useState(null);
+  const [results, setResults] = useState([]);
+  const [photos, setPhotos] = useState({});
+  const [collapsed, setCollapsed] = useState({});
+  const [filterMode, setFilterMode] = useState('all');
+  const [inspector, setInspector] = useState(() => localStorage.getItem('inspector') || '');
+  const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
+  const saveTimer = useRef(null);
+
+  useEffect(() => {
+    loadAndSync();
+  }, [clId]);
+
+  async function loadAndSync() {
+    const [eq, cl, rs, tpls] = await Promise.all([
+      equipmentDB.getById(eqId),
+      checklistDB.getById(clId),
+      resultDB.getByChecklistId(clId),
+      templateDB.getAll(),
+    ]);
+
+    if (!cl) {
+      addToast('체크리스트를 찾을 수 없습니다.', 'error');
+      return;
+    }
+
+    setEquipment(eq);
+    setResults(rs);
+
+    // 사진 로드
+    const photoMap = {};
+    for (const r of rs) {
+      const ps = await photoDB.getByResultId(r.id);
+      if (ps.length > 0) photoMap[r.id] = ps;
+    }
+    setPhotos(photoMap);
+
+    // 🌟 최신 마스터 템플릿과 자동 동기화 (행 삽입 등 신규 항목 반영)
+    const masterTpl = tpls.find((t) => t.id === cl.templateId) || tpls[0];
+    if (masterTpl) {
+      const { updatedChecklist, addedCount } = syncChecklistWithTemplate(cl, masterTpl, eq);
+      if (addedCount > 0) {
+        await checklistDB.put(updatedChecklist);
+        setChecklist(updatedChecklist);
+        addToast(`✨ 템플릿에 새로 추가된 ${addedCount}개 항목이 이 설비에 자동 반영되었습니다!`, 'success', 4500);
+      } else {
+        setChecklist(cl);
+      }
+    } else {
+      setChecklist(cl);
+    }
+  }
+
+  // 수동 템플릿 재동기화 버튼
+  async function handleManualSync() {
+    const tpls = await templateDB.getAll();
+    const masterTpl = tpls.find((t) => t.id === checklist.templateId) || tpls[0];
+    if (!masterTpl) {
+      addToast('동기화할 마스터 템플릿이 없습니다.', 'error');
+      return;
+    }
+    const { updatedChecklist, addedCount } = syncChecklistWithTemplate(checklist, masterTpl, equipment);
+    await checklistDB.put(updatedChecklist);
+    setChecklist(updatedChecklist);
+    if (addedCount > 0) {
+      addToast(`✨ 신규 항목 ${addedCount}개가 동기화되었습니다!`, 'success');
+    } else {
+      addToast('이미 마스터 템플릿과 최신 상태로 일치합니다.', 'default');
+    }
+  }
+
+  const getResult = (itemId) => results.find((r) => String(r.itemId) === String(itemId)) || {};
+
+  async function handleStatus(itemId, status) {
+    const updated = await resultDB.upsert(clId, itemId, {
+      status,
+      inspector,
+      value: getResult(itemId).value || '',
+      note: getResult(itemId).note || '',
+    });
+    setResults((prev) => {
+      const idx = prev.findIndex((r) => String(r.itemId) === String(itemId));
+      const record = { itemId, checklistId: clId, status, inspector, updatedAt: new Date().toISOString(), ...getResult(itemId) };
+      if (typeof updated === 'number') record.id = updated;
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], status, inspector };
+        return next;
+      }
+      return [...prev, record];
+    });
+    scheduleSave();
+  }
+
+  async function handleField(itemId, field, value) {
+    const r = getResult(itemId);
+    const data = { status: r.status || 'pending', inspector, ...r, [field]: value };
+    await resultDB.upsert(clId, itemId, data);
+    setResults((prev) => {
+      const idx = prev.findIndex((r) => String(r.itemId) === String(itemId));
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], [field]: value, updatedAt: new Date().toISOString() };
+        return next;
+      }
+      return [...prev, { itemId, checklistId: clId, [field]: value, updatedAt: new Date().toISOString() }];
+    });
+    scheduleSave();
+  }
+
+  function scheduleSave() {
+    setSaving(true);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      setSaving(false);
+      setLastSaved(new Date());
+    }, 800);
+  }
+
+  function handleInspectorChange(v) {
+    setInspector(v);
+    localStorage.setItem('inspector', v);
+  }
+
+  async function handlePhoto(itemId, file) {
+    if (!file) return;
+    const r = getResult(itemId);
+    let resultId = r.id;
+    if (!resultId) {
+      resultId = await resultDB.upsert(clId, itemId, { status: r.status || 'pending', inspector });
+      const rs = await resultDB.getByChecklistId(clId);
+      setResults(rs);
+    }
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const photoId = await photoDB.add({ resultId, dataUrl: e.target.result, name: file.name });
+      setPhotos((prev) => ({
+        ...prev,
+        [resultId]: [...(prev[resultId] || []), { id: photoId, resultId, dataUrl: e.target.result, name: file.name }],
+      }));
+      addToast('사진을 추가했습니다.', 'success');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function handleDeletePhoto(resultId, photoId) {
+    await photoDB.delete(photoId);
+    setPhotos((prev) => ({
+      ...prev,
+      [resultId]: (prev[resultId] || []).filter((p) => p.id !== photoId),
+    }));
+  }
+
+  function toggleCollapse(catName) {
+    setCollapsed((prev) => ({ ...prev, [catName]: !prev[catName] }));
+  }
+
+  function handleExport() {
+    try {
+      exportChecklistToExcel(equipment, checklist, results);
+      addToast('엑셀 파일을 내려받았습니다.', 'success');
+    } catch (e) {
+      console.error(e);
+      addToast('엑셀 내보내기 실패', 'error');
+    }
+  }
+
+  if (!equipment || !checklist) return <div style={{ padding: 24 }}>불러오는 중...</div>;
+
+  const prog = calcProgress(checklist, results);
+
+  return (
+    <div>
+      {/* Back + Actions */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+        <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/equipments/${eqId}`)}>
+          <ArrowLeft size={15} /> 뒤로
+        </button>
+        <div style={{ flex: 1 }} />
+        <button className="btn btn-secondary btn-sm" onClick={handleManualSync} title="마스터 템플릿의 신규 추가 항목 동기화">
+          <RefreshCw size={14} /> 템플릿 변경 동기화
+        </button>
+        <button className="btn btn-secondary btn-sm" onClick={handleExport}>
+          <Download size={15} /> 엑셀 내보내기
+        </button>
+      </div>
+
+      {/* Header card */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>{equipment.name}</div>
+            <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+              {[equipment.model, equipment.unit && `${equipment.unit}호기`, equipment.line, equipment.location].filter(Boolean).join(' · ')}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
+              템플릿: {checklist.templateName} ({checklist.templateVersion})
+              {checklist.lastSyncedAt && ` · 최신 동기화: ${formatDateTime(checklist.lastSyncedAt)}`}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right', minWidth: 100 }}>
+            <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--color-primary)' }}>{prog.pct}%</div>
+            <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{prog.done}/{prog.total} 완료</div>
+          </div>
+        </div>
+
+        {/* Progress */}
+        <div className="progress-bar" style={{ marginTop: 12, height: 10 }}>
+          <div className="progress-bar-fill" style={{ width: `${prog.pct}%` }} />
+        </div>
+
+        {/* Summary badges */}
+        <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className="badge badge-ng"><AlertTriangle size={11} style={{ marginRight: 4 }} />이상 {prog.ng}</span>
+          <span className="badge badge-pending">미점검 {prog.pending}</span>
+          <span className="badge badge-ok">완료 {prog.done}</span>
+          {saving ? (
+            <span className="saving-badge">· 저장 중...</span>
+          ) : lastSaved ? (
+            <span className="autosave-badge">· 저장됨 {lastSaved.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span>
+          ) : null}
+        </div>
+
+        {/* Inspector */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
+          <label style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>확인자</label>
+          <input
+            className="form-input"
+            style={{ maxWidth: 200 }}
+            value={inspector}
+            onChange={(e) => handleInspectorChange(e.target.value)}
+            placeholder="이름 입력"
+          />
+        </div>
+      </div>
+
+      {/* Filter */}
+      <div className="filter-bar" style={{ marginBottom: 16 }}>
+        <span style={{ fontSize: 13, fontWeight: 500 }}><Filter size={14} style={{ verticalAlign: -2 }} /> 필터</span>
+        {[
+          { v: 'all', label: '전체' },
+          { v: 'ng', label: '이상만' },
+          { v: 'pending', label: '미점검만' },
+        ].map(({ v, label }) => (
+          <button
+            key={v}
+            className={`btn btn-sm ${filterMode === v ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setFilterMode(v)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Categories */}
+      {(checklist.categories || []).map((cat) => {
+        const catResults = (cat.items || []).map((item) => ({ item, result: getResult(item.id) }));
+        const filteredItems = catResults.filter(({ result }) => {
+          if (filterMode === 'ng') return result.status === 'ng';
+          if (filterMode === 'pending') return !result.status || result.status === 'pending';
+          return true;
+        });
+        if (filteredItems.length === 0) return null;
+
+        const catDone = catResults.filter(({ result }) => ['ok','ng','na'].includes(result.status)).length;
+        const catNg = catResults.filter(({ result }) => result.status === 'ng').length;
+        const isOpen = !collapsed[cat.name];
+
+        return (
+          <div key={cat.name} className="category-section">
+            <div className="category-header" onClick={() => toggleCollapse(cat.name)}>
+              {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              <span className="category-title">{cat.name}</span>
+              <span className="category-badge">
+                {catDone}/{catResults.length}
+                {catNg > 0 && <span className="badge badge-ng" style={{ marginLeft: 6 }}>이상 {catNg}</span>}
+              </span>
+            </div>
+
+            {isOpen && (
+              <div>
+                {filteredItems.map(({ item, result }) => (
+                  <CheckItem
+                    key={item.id}
+                    item={item}
+                    result={result}
+                    photos={result.id ? (photos[result.id] || []) : []}
+                    onStatus={(s) => handleStatus(item.id, s)}
+                    onField={(f, v) => handleField(item.id, f, v)}
+                    onPhoto={(file) => handlePhoto(item.id, file)}
+                    onDeletePhoto={(photoId) => handleDeletePhoto(result.id, photoId)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CheckItem({ item, result, photos, onStatus, onField, onPhoto, onDeletePhoto }) {
+  const [showNote, setShowNote] = useState(!!(result.note || result.value));
+  const fileRef = useRef(null);
+
+  const status = result.status || 'pending';
+
+  return (
+    <div
+      className={`checklist-item-card ${status === 'ng' ? 'border-ng' : ''}`}
+      style={{
+        borderLeft: `4px solid ${status === 'ng' ? 'var(--color-ng)' : status === 'ok' ? 'var(--color-ok)' : 'var(--color-border)'}`,
+        background: item.isNewlyAdded ? '#fffbeb' : 'var(--color-surface)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <div className="checklist-item-name" style={{ margin: 0 }}>
+          {item.name}
+        </div>
+        {item.isNewlyAdded && (
+          <span className="badge badge-pending" style={{ fontSize: 11 }}>
+            <Sparkles size={11} style={{ marginRight: 3 }} />신규 추가 항목
+          </span>
+        )}
+      </div>
+
+      {item.criteria && (
+        <div className="checklist-item-criteria">{item.criteria}</div>
+      )}
+
+      {/* Status buttons */}
+      <div className="status-btn-group" style={{ marginBottom: 8 }}>
+        {STATUS_OPTIONS.map(({ value, label, cls }) => (
+          <button
+            key={value}
+            className={`status-btn ${cls}${status === value ? ' selected' : ''}`}
+            onClick={() => onStatus(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Expand for note/value */}
+      <button
+        style={{ fontSize: 12, color: 'var(--color-text-muted)', background: 'none', cursor: 'pointer', marginBottom: showNote ? 8 : 0 }}
+        onClick={() => setShowNote((v) => !v)}
+      >
+        {showNote ? '▲ 접기' : '▼ 비고/측정값 입력'}
+      </button>
+
+      {showNote && (
+        <div className="checklist-item-controls">
+          {item.inputType === 'number' && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <label style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>측정값</label>
+              <input
+                className="form-input"
+                type="number"
+                style={{ maxWidth: 160 }}
+                value={result.value || ''}
+                onChange={(e) => onField('value', e.target.value)}
+                placeholder="숫자 입력"
+              />
+            </div>
+          )}
+          {item.inputType === 'text' && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <label style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>값</label>
+              <input
+                className="form-input"
+                value={result.value || ''}
+                onChange={(e) => onField('value', e.target.value)}
+                placeholder="텍스트 입력"
+              />
+            </div>
+          )}
+          <div>
+            <label style={{ fontSize: 13, fontWeight: 500, display: 'block', marginBottom: 4 }}>비고</label>
+            <textarea
+              className="form-input"
+              rows={2}
+              value={result.note || ''}
+              onChange={(e) => onField('note', e.target.value)}
+              placeholder="비고 입력"
+            />
+          </div>
+
+          {/* Photos */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 500 }}>사진</label>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => fileRef.current?.click()}
+              >
+                <Camera size={13} /> 추가
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style={{ display: 'none' }}
+                onChange={(e) => { onPhoto(e.target.files[0]); e.target.value = ''; }}
+              />
+            </div>
+            {photos.length > 0 && (
+              <div className="photo-grid">
+                {photos.map((p) => (
+                  <div key={p.id} className="photo-item">
+                    <img src={p.dataUrl} alt={p.name} />
+                    <button className="photo-delete" onClick={() => onDeletePhoto(p.id)}>
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {result.updatedAt && (
+            <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+              마지막 수정: {formatDateTime(result.updatedAt)}
+              {result.inspector && ` · ${result.inspector}`}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
