@@ -4,7 +4,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { equipmentDB, checklistDB, resultDB, templateDB } from '../utils/db';
 import { calcProgress, formatDateTime } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
-import { ArrowLeft, ClipboardList, Plus, ExternalLink, Pencil, CheckSquare, Square, Copy, ChevronDown, ChevronUp, Folder } from 'lucide-react';
+import ChecklistPage from './ChecklistPage';
+import { ArrowLeft, ClipboardList, Plus, ExternalLink, Pencil, CheckSquare, Square, Copy, ChevronDown, ChevronUp, Folder, Trash2 } from 'lucide-react';
 
 export default function EquipmentDetail() {
   const { id } = useParams();
@@ -89,6 +90,10 @@ export default function EquipmentDetail() {
   }
 
   async function handleCreateChecklist() {
+    if (checklists.length > 0) {
+      navigate(`/equipments/${eqId}/checklist/${checklists[checklists.length - 1].id}`);
+      return;
+    }
     if (!selTemplate) { addToast('템플릿을 선택하세요.', 'error'); return; }
     const tpl = templates.find((t) => t.id === selTemplate);
     if (!tpl) return;
@@ -158,7 +163,21 @@ export default function EquipmentDetail() {
     setCopySource(null);
   }
 
+  async function handleDeleteChecklist(checklist) {
+    if (!confirm(`${formatDateTime(checklist.createdAt)} 체크리스트를 삭제하시겠습니까?\n점검 결과도 함께 삭제되며 되돌릴 수 없습니다.`)) return;
+    try {
+      await checklistDB.delete(checklist.id);
+      addToast('체크리스트를 삭제했습니다.', 'success');
+      load();
+    } catch (error) {
+      console.error(error);
+      addToast(`삭제 실패: ${error.message}`, 'error');
+    }
+  }
+
   const activeTemplate = templates.find((t) => t.id === editForm?.templateId) || templates[0];
+  const activeChecklist = checklists[checklists.length - 1];
+  const activeChecklistStats = checklistStats.find(({ cl }) => cl.id === activeChecklist?.id);
 
   function toggleAllEditCategories(selectAll) {
     if (!activeTemplate) return;
@@ -235,9 +254,23 @@ export default function EquipmentDetail() {
               <Pencil size={13} /> 모듈/정보 변경
             </button>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
-            <Plus size={15} /> 체크리스트 생성
-          </button>
+          {activeChecklist ? (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn btn-primary btn-sm" style={{ display: 'none' }} onClick={() => navigate(`/equipments/${eqId}/checklist/${activeChecklist.id}`)}>
+                <ExternalLink size={15} /> 체크리스트 열기
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => openCopyChecklist(activeChecklist)} title="다른 설비로 복사">
+                <Copy size={14} /> 복사
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={() => handleDeleteChecklist(activeChecklist)} title="체크리스트 삭제" style={{ color: 'var(--color-ng)' }}>
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ) : (
+            <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
+              <Plus size={15} /> 체크리스트 생성
+            </button>
+          )}
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 32px', fontSize: 14 }}>
           {equipment.model && <div><span style={{ color: 'var(--color-text-muted)' }}>모델: </span>{equipment.model}</div>}
@@ -267,8 +300,26 @@ export default function EquipmentDetail() {
         {equipment.memo && (
           <div style={{ marginTop: 10, fontSize: 13, color: 'var(--color-text-muted)' }}>{equipment.memo}</div>
         )}
+        {activeChecklistStats && (
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--color-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontWeight: 700, fontSize: 14 }}>점검 진행률</span>
+              <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>{activeChecklistStats.pct}%</span>
+            </div>
+            <div className="progress-bar" style={{ marginTop: 8, height: 9 }}>
+              <div className="progress-bar-fill" style={{ width: `${activeChecklistStats.pct}%` }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 9, flexWrap: 'wrap' }}>
+              <span className="badge badge-ng">이상 {activeChecklistStats.ng}</span>
+              <span className="badge badge-pending">미점검 {activeChecklistStats.pending}</span>
+              <span className="badge badge-ok">완료 {activeChecklistStats.done}/{activeChecklistStats.total}</span>
+            </div>
+          </div>
+        )}
       </div>
 
+      {false && (
+      <>
       {/* Checklists */}
       <div className="card">
         <div className="card-header">
@@ -327,6 +378,9 @@ export default function EquipmentDetail() {
                         <button className="btn btn-secondary btn-sm" onClick={() => openCopyChecklist(cl)}>
                           <Copy size={13} /> 복사
                         </button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => handleDeleteChecklist(cl)} style={{ color: 'var(--color-ng)' }} title="체크리스트 삭제">
+                          <Trash2 size={13} /> 삭제
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -336,6 +390,14 @@ export default function EquipmentDetail() {
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {activeChecklist && (
+        <div style={{ marginTop: 20 }}>
+          <ChecklistPage embedded equipmentId={eqId} checklistId={activeChecklist.id} />
+        </div>
+      )}
 
       {copySource && (
         <div className="modal-overlay" onClick={() => setCopySource(null)}>
@@ -417,25 +479,13 @@ export default function EquipmentDetail() {
               <label className="form-label">설비명 *</label>
               <input className="form-input" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
             </div>
-            <div className="grid-2">
-              <div className="form-group">
-                <label className="form-label">모델</label>
-                <input className="form-input" value={editForm.model || ''} onChange={(e) => setEditForm({ ...editForm, model: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">호기</label>
-                <input className="form-input" value={editForm.unit || ''} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })} />
-              </div>
+            <div className="form-group">
+              <label className="form-label">호기</label>
+              <input className="form-input" value={editForm.unit || ''} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })} />
             </div>
-            <div className="grid-2">
-              <div className="form-group">
-                <label className="form-label">라인</label>
-                <input className="form-input" value={editForm.line || ''} onChange={(e) => setEditForm({ ...editForm, line: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">위치</label>
-                <input className="form-input" value={editForm.location || ''} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} />
-              </div>
+            <div className="form-group">
+              <label className="form-label">위치</label>
+              <input className="form-input" value={editForm.location || ''} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} />
             </div>
 
             <div className="form-group">

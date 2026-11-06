@@ -164,7 +164,7 @@ export function exportChecklistToExcel(equipment, checklist, results) {
     ['호기', equipment.unit ? `${equipment.unit}호기` : '', '', '라인', equipment.line || ''],
     ['위치', equipment.location || '', '', '점검일', new Date().toLocaleDateString('ko-KR')],
     [],
-    ['구분 (카테고리)', '순서', '체크 항목', '확인 기준 / 비고', '점검 상태', '측정값', '작업자 비고', '확인자', '확인 시각'],
+    ['구분 (카테고리)', '순서', '체크 항목', '확인 기준 / 비고', '점검 상태', '측정값', '작업자 비고', '확인 시각'],
   ];
 
   const dataRows = [];
@@ -179,7 +179,6 @@ export function exportChecklistToExcel(equipment, checklist, results) {
         statusLabel(result.status),
         result.value || '',
         result.note || '',
-        result.inspector || '',
         result.updatedAt ? new Date(result.updatedAt).toLocaleString('ko-KR') : '',
       ]);
     });
@@ -189,7 +188,7 @@ export function exportChecklistToExcel(equipment, checklist, results) {
 
   ws['!cols'] = [
     { wch: 18 }, { wch: 8 }, { wch: 34 }, { wch: 30 },
-    { wch: 10 }, { wch: 12 }, { wch: 24 }, { wch: 12 }, { wch: 20 },
+    { wch: 10 }, { wch: 12 }, { wch: 24 }, { wch: 20 },
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, '점검결과');

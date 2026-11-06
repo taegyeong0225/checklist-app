@@ -150,8 +150,8 @@ export default function EquipmentList() {
     const sourceEquipments = equipments.filter((equipment) => equipment.folderId === sourceFolderId);
 
     for (const sourceEquipment of sourceEquipments) {
-      const { id, createdAt, folderId, ...equipmentData } = sourceEquipment;
-      const targetEquipmentId = await equipmentDB.add({ ...equipmentData, folderId: targetFolderId });
+      const { id, createdAt, folderId, turnOnDate, ...equipmentData } = sourceEquipment;
+      const targetEquipmentId = await equipmentDB.add({ ...equipmentData, folderId: targetFolderId, turnOnDate: '' });
       const equipmentChecklists = sourceChecklists.filter((checklist) => checklist.equipmentId === id);
 
       for (const sourceChecklist of equipmentChecklists) {
@@ -774,21 +774,6 @@ export default function EquipmentList() {
               <button className="modal-close" onClick={() => setShowEqModal(false)}>✕</button>
             </div>
 
-            {/* 소속 폴더 선택 */}
-            <div className="form-group">
-              <label className="form-label">소속 메인 설비 폴더</label>
-              <select
-                className="form-select"
-                value={eqForm.folderId || ''}
-                onChange={(e) => setEqForm({ ...eqForm, folderId: e.target.value || null })}
-              >
-                <option value="">- 단독 설비 (폴더 없음) -</option>
-                {folders.map((f) => (
-                  <option key={f.id} value={f.id}>📁 {f.name} ({f.unit ? `${f.unit}호기` : f.line || ''})</option>
-                ))}
-              </select>
-            </div>
-
             <div className="form-group">
               <label className="form-label">단위 설비명 *</label>
               <input
@@ -800,26 +785,14 @@ export default function EquipmentList() {
               />
             </div>
 
-            <div className="grid-2">
-              <div className="form-group">
-                <label className="form-label">모델</label>
-                <input className="form-input" value={eqForm.model} onChange={(e) => setEqForm({ ...eqForm, model: e.target.value })} placeholder="예: GEN2" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">호기</label>
-                <input className="form-input" value={eqForm.unit} onChange={(e) => setEqForm({ ...eqForm, unit: e.target.value })} placeholder="예: 3" />
-              </div>
+            <div className="form-group">
+              <label className="form-label">호기</label>
+              <input className="form-input" value={eqForm.unit} onChange={(e) => setEqForm({ ...eqForm, unit: e.target.value })} placeholder="예: 3" />
             </div>
 
-            <div className="grid-2">
-              <div className="form-group">
-                <label className="form-label">라인</label>
-                <input className="form-input" value={eqForm.line} onChange={(e) => setEqForm({ ...eqForm, line: e.target.value })} placeholder="예: A라인" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">위치</label>
-                <input className="form-input" value={eqForm.location} onChange={(e) => setEqForm({ ...eqForm, location: e.target.value })} placeholder="예: 1공장 2층" />
-              </div>
+            <div className="form-group">
+              <label className="form-label">위치</label>
+              <input className="form-input" value={eqForm.location} onChange={(e) => setEqForm({ ...eqForm, location: e.target.value })} placeholder="예: 1공장 2층" />
             </div>
 
             <div className="form-group">
