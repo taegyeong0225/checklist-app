@@ -227,7 +227,10 @@ export default function EquipmentDetail() {
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span className="card-title">⚙️ {equipment.name}</span>
+            <span className="card-title" style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+              <span title={equipment.turnOnDate ? `TURN ON ${equipment.turnOnDate}` : 'TURN ON 미설정'} style={{ width: 11, height: 11, borderRadius: '50%', flexShrink: 0, background: equipment.turnOnDate ? 'var(--color-ok)' : 'var(--color-ng)' }} />
+              ⚙️ {equipment.name}
+            </span>
             <button className="btn btn-secondary btn-sm" onClick={openEditEquipment} title="설비 정보 및 포함 모듈 변경">
               <Pencil size={13} /> 모듈/정보 변경
             </button>
@@ -241,6 +244,7 @@ export default function EquipmentDetail() {
           {equipment.unit && <div><span style={{ color: 'var(--color-text-muted)' }}>호기: </span>{equipment.unit}호기</div>}
           {equipment.line && <div><span style={{ color: 'var(--color-text-muted)' }}>라인: </span>{equipment.line}</div>}
           {equipment.location && <div><span style={{ color: 'var(--color-text-muted)' }}>위치: </span>{equipment.location}</div>}
+          <div><span style={{ color: 'var(--color-text-muted)' }}>TURN ON: </span>{equipment.turnOnDate || '미설정'}</div>
           <div>
             <span style={{ color: 'var(--color-text-muted)' }}>포함 모듈: </span>
             <strong style={{ color: 'var(--color-primary)' }}>
@@ -432,6 +436,11 @@ export default function EquipmentDetail() {
                 <label className="form-label">위치</label>
                 <input className="form-input" value={editForm.location || ''} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} />
               </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">TURN ON 일자</label>
+              <input className="form-input" type="date" value={editForm.turnOnDate || ''} onChange={(e) => setEditForm({ ...editForm, turnOnDate: e.target.value })} />
             </div>
 
             {/* 포함 모듈 선택 */}

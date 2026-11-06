@@ -112,7 +112,7 @@ export default function Dashboard() {
               >
                 <AlertTriangle size={18} color="var(--color-ng)" style={{ flexShrink: 0, marginTop: 1 }} />
                 <span style={{ flex: 1 }}>
-                  <strong>{eq.name}</strong>
+                  <strong style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span title={eq.turnOnDate ? `TURN ON ${eq.turnOnDate}` : 'TURN ON 미설정'} style={{ width: 9, height: 9, borderRadius: '50%', background: eq.turnOnDate ? 'var(--color-ok)' : 'var(--color-ng)' }} />{eq.name}</strong>
                   {parentFolder && <span style={{ color: 'var(--color-text-muted)' }}> · {parentFolder.name}</span>}
                   <span style={{ display: 'block', marginTop: 3, fontSize: 14 }}>{categoryName} · {item.name}</span>
                   {(result.note || result.inspector || result.updatedAt) && (
@@ -175,7 +175,7 @@ export default function Dashboard() {
                         <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>- (단독 설비)</span>
                       )}
                     </td>
-                    <td style={{ fontWeight: 600 }}>{eq.name}</td>
+                    <td style={{ fontWeight: 600 }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span title={eq.turnOnDate ? `TURN ON ${eq.turnOnDate}` : 'TURN ON 미설정'} style={{ width: 9, height: 9, borderRadius: '50%', background: eq.turnOnDate ? 'var(--color-ok)' : 'var(--color-ng)' }} />{eq.name}</span></td>
                     <td>{[eq.unit && `${eq.unit}호기`, eq.line].filter(Boolean).join(' · ') || '-'}</td>
                     <td style={{ minWidth: 140 }}>
                       {hasChecklist ? (

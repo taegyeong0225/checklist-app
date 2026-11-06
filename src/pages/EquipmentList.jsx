@@ -16,6 +16,7 @@ const EMPTY_EQUIPMENT = {
   unit: '',
   line: '',
   location: '',
+  turnOnDate: '',
   folderId: null,
   templateId: '',
   includedCategories: [],
@@ -603,7 +604,10 @@ export default function EquipmentList() {
                   onClick={() => navigate(`/equipments/${eq.id}`)}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                    <div className="equipment-card-name" style={{ fontSize: 15 }}>{eq.name}</div>
+                    <div className="equipment-card-name" style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 15 }}>
+                      <span title={eq.turnOnDate ? `TURN ON ${eq.turnOnDate}` : 'TURN ON 미설정'} style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, background: eq.turnOnDate ? 'var(--color-ok)' : 'var(--color-ng)' }} />
+                      {eq.name}
+                    </div>
                     <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-primary)' }}>
                       {prog.pct}%
                     </span>
@@ -816,6 +820,11 @@ export default function EquipmentList() {
                 <label className="form-label">위치</label>
                 <input className="form-input" value={eqForm.location} onChange={(e) => setEqForm({ ...eqForm, location: e.target.value })} placeholder="예: 1공장 2층" />
               </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">TURN ON 일자</label>
+              <input className="form-input" type="date" value={eqForm.turnOnDate || ''} onChange={(e) => setEqForm({ ...eqForm, turnOnDate: e.target.value })} />
             </div>
 
             {/* 포함 모듈/카테고리 선택 */}
