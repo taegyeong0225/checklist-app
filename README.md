@@ -40,6 +40,8 @@ VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 
 `service_role` key와 DB 비밀번호는 브라우저 코드나 `.env.local`에 넣지 않습니다.
 
+이미 `schema.sql`을 실행한 프로젝트에서 저장 권한 오류가 나면 [supabase/fix-authenticated-grants.sql](./supabase/fix-authenticated-grants.sql)을 SQL Editor에서 한 번 실행합니다.
+
 ## 시작하기
 
 ### 필요 사항

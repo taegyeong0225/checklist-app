@@ -24,8 +24,8 @@ function dataOnly(record, excluded = []) {
   return copy;
 }
 
-async function getAll(table, map = baseRecord) {
-  const { data, error } = await client().from(table).select('*').order('created_at');
+async function getAll(table, map = baseRecord, orderColumn = 'created_at') {
+  const { data, error } = await client().from(table).select('*').order(orderColumn);
   throwIfError(error);
   return data.map(map);
 }
@@ -115,8 +115,8 @@ export const checklistDB = {
 };
 
 export const resultDB = {
-  getAll: () => getAll('results', mapResult),
-  getByChecklistId: async (checklistId) => (await getAll('results', mapResult)).filter((item) => item.checklistId === checklistId),
+  getAll: () => getAll('results', mapResult, 'updated_at'),
+  getByChecklistId: async (checklistId) => (await getAll('results', mapResult, 'updated_at')).filter((item) => item.checklistId === checklistId),
   getById: (id) => getById('results', id, mapResult),
   upsert: async (checklistId, itemId, record) => {
     const { data, error } = await client().from('results').upsert({

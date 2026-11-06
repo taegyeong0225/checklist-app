@@ -70,4 +70,7 @@ create policy "owner access" on public.checklists for all using (owner_id = auth
 create policy "owner access" on public.results for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 create policy "owner access" on public.photos for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
 
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on table public.templates, public.folders, public.equipments, public.checklists, public.results, public.photos to authenticated;
+
 alter publication supabase_realtime add table public.templates, public.folders, public.equipments, public.checklists, public.results;
