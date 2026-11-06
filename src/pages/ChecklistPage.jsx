@@ -180,8 +180,6 @@ export default function ChecklistPage() {
   }
 
   async function handleDeleteItem(item) {
-    if (!confirm(`"${item.name}" 항목을 이 체크리스트에서 삭제하시겠습니까?\n점검 결과도 함께 삭제되며 되돌릴 수 없습니다.`)) return;
-
     const result = getResult(item.id);
     if (result.id) await resultDB.delete(result.id);
 
