@@ -196,6 +196,44 @@ export function exportChecklistToExcel(equipment, checklist, results) {
   XLSX.writeFile(wb, `${equipment.name}_점검결과_${formatDate(new Date())}.xlsx`);
 }
 
+/**
+ * 사이트에서 편집한 마스터 템플릿을 다시 가져올 수 있는 엑셀 형식으로 내보낸다.
+ */
+export function exportTemplateToExcel(template) {
+  const wb = XLSX.utils.book_new();
+  const rows = [[
+    '구분', '순서', '체크 항목', '확인사항', '비고', '필수',
+    'item_id', 'category_id', 'sort_order', 'source_row', 'active',
+  ]];
+
+  for (const category of template.categories || []) {
+    (category.items || []).forEach((item, index) => {
+      rows.push([
+        category.name,
+        item.order || index + 1,
+        item.name || '',
+        item.criteria || '',
+        item.note || '',
+        'Y',
+        item.id || '',
+        category.categoryId || category.name,
+        item.order || index + 1,
+        '',
+        'Y',
+      ]);
+    });
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 22 }, { wch: 8 }, { wch: 42 }, { wch: 34 }, { wch: 22 }, { wch: 8 },
+    { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'MMI 셋업 리스트');
+  const safeName = (template.name || 'MMI_셋업_리스트').replace(/[\\/:*?"<>|]/g, '_');
+  XLSX.writeFile(wb, `${safeName}_${formatDate(new Date())}.xlsx`);
+}
+
 function statusLabel(status) {
   const map = { ok: '정상', ng: '이상', na: '해당없음', pending: '미점검' };
   return map[status] || '미점검';

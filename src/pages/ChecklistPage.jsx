@@ -179,6 +179,25 @@ export default function ChecklistPage() {
     }));
   }
 
+  async function handleDeleteItem(item) {
+    if (!confirm(`"${item.name}" 항목을 이 체크리스트에서 삭제하시겠습니까?\n점검 결과도 함께 삭제되며 되돌릴 수 없습니다.`)) return;
+
+    const result = getResult(item.id);
+    if (result.id) await resultDB.delete(result.id);
+
+    const updatedChecklist = {
+      ...checklist,
+      excludedItemIds: [...new Set([...(checklist.excludedItemIds || []), String(item.id)])],
+      categories: (checklist.categories || [])
+        .map((category) => ({ ...category, items: category.items.filter((entry) => String(entry.id) !== String(item.id)) }))
+        .filter((category) => category.items.length > 0),
+    };
+    await checklistDB.put(updatedChecklist);
+    setChecklist(updatedChecklist);
+    setResults((previous) => previous.filter((entry) => String(entry.itemId) !== String(item.id)));
+    addToast('이 체크리스트에서 항목을 삭제했습니다.', 'success');
+  }
+
   function toggleCollapse(catName) {
     setCollapsed((prev) => ({ ...prev, [catName]: !prev[catName] }));
   }
@@ -317,6 +336,7 @@ export default function ChecklistPage() {
                     onField={(f, v) => handleField(item.id, f, v)}
                     onPhoto={(file) => handlePhoto(item.id, file)}
                     onDeletePhoto={(photoId) => handleDeletePhoto(result.id, photoId)}
+                    onDelete={() => handleDeleteItem(item)}
                   />
                 ))}
               </div>
@@ -328,7 +348,7 @@ export default function ChecklistPage() {
   );
 }
 
-function CheckItem({ item, result, photos, onStatus, onField, onPhoto, onDeletePhoto }) {
+function CheckItem({ item, result, photos, onStatus, onField, onPhoto, onDeletePhoto, onDelete }) {
   const [showNote, setShowNote] = useState(!!(result.note || result.value));
   const fileRef = useRef(null);
 
@@ -346,11 +366,16 @@ function CheckItem({ item, result, photos, onStatus, onField, onPhoto, onDeleteP
         <div className="checklist-item-name" style={{ margin: 0 }}>
           {item.name}
         </div>
-        {item.isNewlyAdded && (
-          <span className="badge badge-pending" style={{ fontSize: 11 }}>
-            <Sparkles size={11} style={{ marginRight: 3 }} />신규 추가 항목
-          </span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {item.isNewlyAdded && (
+            <span className="badge badge-pending" style={{ fontSize: 11 }}>
+              <Sparkles size={11} style={{ marginRight: 3 }} />신규 추가 항목
+            </span>
+          )}
+          <button className="btn-icon" onClick={onDelete} title="이 체크리스트에서 항목 삭제" style={{ color: 'var(--color-ng)' }}>
+            <Trash2 size={15} />
+          </button>
+        </div>
       </div>
 
       {item.criteria && (

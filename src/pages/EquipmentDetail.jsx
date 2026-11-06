@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { equipmentDB, checklistDB, resultDB, templateDB } from '../utils/db';
 import { calcProgress, formatDateTime } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
-import { ArrowLeft, ClipboardList, Plus, ExternalLink, Pencil, CheckSquare, Square, Copy } from 'lucide-react';
+import { ArrowLeft, ClipboardList, Plus, ExternalLink, Pencil, CheckSquare, Square, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function EquipmentDetail() {
   const { id } = useParams();
@@ -62,7 +62,7 @@ export default function EquipmentDetail() {
     if (!incCats || incCats.length === 0) {
       incCats = defTpl ? defTpl.categories.map((c) => c.name) : [];
     }
-    if (!incIds || incIds.length === 0) {
+    if (!Array.isArray(incIds)) {
       incIds = defTpl ? defTpl.categories.flatMap((c) => c.items.map((i) => i.id)) : [];
     }
 
@@ -97,13 +97,19 @@ export default function EquipmentDetail() {
     const incCats = equipment.includedCategories && equipment.includedCategories.length > 0
       ? new Set(equipment.includedCategories)
       : null;
+    const incItemIds = incCats && Array.isArray(equipment.includedItemIds)
+      ? new Set(equipment.includedItemIds)
+      : null;
 
     const categories = (tpl.categories || [])
       .filter((cat) => !incCats || incCats.has(cat.name))
       .map((cat) => ({
         ...cat,
-        items: (cat.items || []).map((item) => ({ ...item })),
-      }));
+        items: (cat.items || [])
+          .filter((item) => !incItemIds || incItemIds.has(item.id))
+          .map((item) => ({ ...item })),
+      }))
+      .filter((cat) => cat.items.length > 0);
 
     if (categories.length === 0) {
       addToast('포함된 모듈이 없습니다. 설비 설정에서 모듈을 선택하세요.', 'error');
@@ -187,6 +193,19 @@ export default function EquipmentDetail() {
         includedCategories: Array.from(curCats),
         includedItemIds: Array.from(curIds),
       };
+    });
+  }
+
+  function toggleEditItem(cat, item) {
+    setEditForm((f) => {
+      const curCats = new Set(f.includedCategories || []);
+      const curIds = new Set(f.includedItemIds || []);
+      if (curIds.has(item.id)) curIds.delete(item.id);
+      else {
+        curCats.add(cat.name);
+        curIds.add(item.id);
+      }
+      return { ...f, includedCategories: Array.from(curCats), includedItemIds: Array.from(curIds) };
     });
   }
 
@@ -485,8 +504,37 @@ export default function EquipmentDetail() {
                             <span className="badge badge-na" style={{ fontSize: 11 }}>
                               {cat.items.length}개 항목
                             </span>
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedCats((state) => ({ ...state, [cat.name]: !state[cat.name] }));
+                              }}
+                              title="하위 항목 선택"
+                            >
+                              {expandedCats[cat.name] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </button>
                           </div>
                         </div>
+                        {isCatIncluded && expandedCats[cat.name] && (
+                          <div style={{ padding: '0 14px 12px', borderTop: '1px solid var(--color-border)' }}>
+                            {cat.items.map((item) => {
+                              const isItemIncluded = (editForm.includedItemIds || []).includes(item.id);
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => toggleEditItem(cat, item)}
+                                  style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'flex-start', padding: '9px 0', textAlign: 'left', borderBottom: '1px solid #f1f5f9' }}
+                                >
+                                  {isItemIncluded ? <CheckSquare size={17} color="var(--color-ok)" /> : <Square size={17} color="var(--color-text-muted)" />}
+                                  <span style={{ fontSize: 13, color: isItemIncluded ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{item.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

@@ -223,7 +223,7 @@ export default function EquipmentList() {
     if (!incCats || incCats.length === 0) {
       incCats = defTpl ? defTpl.categories.map((c) => c.name) : [];
     }
-    if (!incIds || incIds.length === 0) {
+    if (!Array.isArray(incIds)) {
       incIds = defTpl ? defTpl.categories.flatMap((c) => c.items.map((i) => i.id)) : [];
     }
 
@@ -365,6 +365,19 @@ export default function EquipmentList() {
         includedCategories: Array.from(curCats),
         includedItemIds: Array.from(curIds),
       };
+    });
+  }
+
+  function toggleItem(cat, item) {
+    setEqForm((f) => {
+      const curCats = new Set(f.includedCategories || []);
+      const curIds = new Set(f.includedItemIds || []);
+      if (curIds.has(item.id)) curIds.delete(item.id);
+      else {
+        curCats.add(cat.name);
+        curIds.add(item.id);
+      }
+      return { ...f, includedCategories: Array.from(curCats), includedItemIds: Array.from(curIds) };
     });
   }
 
@@ -871,8 +884,37 @@ export default function EquipmentList() {
                             <span className="badge badge-na" style={{ fontSize: 11 }}>
                               {cat.items.length}개 항목
                             </span>
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedCats((state) => ({ ...state, [cat.name]: !state[cat.name] }));
+                              }}
+                              title="하위 항목 선택"
+                            >
+                              {expandedCats[cat.name] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </button>
                           </div>
                         </div>
+                        {isCatIncluded && expandedCats[cat.name] && (
+                          <div style={{ padding: '0 14px 12px', borderTop: '1px solid var(--color-border)' }}>
+                            {cat.items.map((item) => {
+                              const isItemIncluded = (eqForm.includedItemIds || []).includes(item.id);
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => toggleItem(cat, item)}
+                                  style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'flex-start', padding: '9px 0', textAlign: 'left', borderBottom: '1px solid #f1f5f9' }}
+                                >
+                                  {isItemIncluded ? <CheckSquare size={17} color="var(--color-ok)" /> : <Square size={17} color="var(--color-text-muted)" />}
+                                  <span style={{ fontSize: 13, color: isItemIncluded ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{item.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

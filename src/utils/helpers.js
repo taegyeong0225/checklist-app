@@ -64,6 +64,10 @@ export function syncChecklistWithTemplate(checklist, template, equipment) {
   const incCats = equipment?.includedCategories && equipment.includedCategories.length > 0
     ? new Set(equipment.includedCategories)
     : null; // null이면 템플릿 전체 포함
+  const incItemIds = incCats && Array.isArray(equipment?.includedItemIds)
+    ? new Set(equipment.includedItemIds.map(String))
+    : null;
+  const excludedItemIds = new Set((checklist.excludedItemIds || []).map(String));
 
   const updatedCategories = [];
   let addedCount = 0;
@@ -84,6 +88,8 @@ export function syncChecklistWithTemplate(checklist, template, equipment) {
 
     const mergedItems = [];
     for (const tplItem of (tplCat.items || [])) {
+      const itemId = String(tplItem.id || `ITEM_${tplCat.name}_${tplItem.name}`);
+      if ((incItemIds && !incItemIds.has(itemId)) || excludedItemIds.has(itemId)) continue;
       const existing = (tplItem.id && existMap.get(String(tplItem.id))) || existMap.get(tplItem.name);
 
       if (existing) {
