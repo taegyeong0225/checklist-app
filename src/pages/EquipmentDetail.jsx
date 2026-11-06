@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { equipmentDB, checklistDB, resultDB, templateDB } from '../utils/db';
 import { calcProgress, formatDateTime } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
-import { ArrowLeft, ClipboardList, Plus, ExternalLink, Pencil, CheckSquare, Square, Copy, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, ClipboardList, Plus, ExternalLink, Pencil, CheckSquare, Square, Copy, ChevronDown, ChevronUp, Folder } from 'lucide-react';
 
 export default function EquipmentDetail() {
   const { id } = useParams();
@@ -212,9 +212,16 @@ export default function EquipmentDetail() {
   return (
     <div>
       {/* Back */}
-      <button className="btn btn-secondary btn-sm" style={{ marginBottom: 16 }} onClick={() => navigate('/equipments')}>
-        <ArrowLeft size={15} /> 목록으로
-      </button>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <button className="btn btn-secondary btn-sm" onClick={() => navigate('/equipments')}>
+          <ArrowLeft size={15} /> 목록으로
+        </button>
+        {equipment.folderId && (
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/equipments?folder=${equipment.folderId}`)}>
+            <Folder size={15} /> 폴더로 이동
+          </button>
+        )}
+      </div>
 
       {/* Equipment Info */}
       <div className="card" style={{ marginBottom: 20 }}>

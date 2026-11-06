@@ -361,11 +361,16 @@ tr:hover td { background: #f8fafc; }
 /* Responsive */
 @media (max-width: 768px) {
   .sidebar {
-    transform: translateX(-100%);
-    width: 240px;
+    width: min(86vw, 360px);
+    height: 100dvh;
+    max-height: 100dvh;
+    transform: translate3d(-105%, 0, 0);
+    z-index: 300;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.28);
+    will-change: transform;
   }
-  .sidebar.open { transform: translateX(0); }
-  .sidebar-overlay.open { display: block; }
+  .sidebar.open { transform: translate3d(0, 0, 0); }
+  .sidebar-overlay.open { display: block; z-index: 290; }
   .main-content { margin-left: 0; }
   .sidebar-toggle { display: flex; align-items: center; }
   .page-body { padding: 16px; }

@@ -1,6 +1,6 @@
 // 설비 목록 페이지 - 폴더(메인 설비 그룹) & 단위 설비 계층 구조 지원
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { folderDB, equipmentDB, checklistDB, resultDB, templateDB } from '../utils/db';
 import { calcProgress } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
@@ -9,7 +9,7 @@ import {
   Server, ArrowLeft, CheckSquare, Square, ChevronDown, ChevronUp, Layers, Sparkles, Copy
 } from 'lucide-react';
 
-const EMPTY_FOLDER = { name: '', model: '', unit: '', line: '', location: '', memo: '' };
+const EMPTY_FOLDER = { name: '', model: '', unit: '', line: '', location: '', deliveryDate: '', memo: '' };
 const EMPTY_EQUIPMENT = {
   name: '',
   model: '',
@@ -37,13 +37,14 @@ const DEFAULT_PRESET_UNITS = [
 ];
 
 export default function EquipmentList() {
+  const location = useLocation();
   const [folders, setFolders] = useState([]);
   const [equipments, setEquipments] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [folderProgressMap, setFolderProgressMap] = useState({}); // folderId -> { pct, total, done, ng }
   const [eqProgressMap, setEqProgressMap] = useState({});         // eqId -> { pct, ng, pending }
 
-  const [currentFolderId, setCurrentFolderId] = useState(null); // null = 루트, number = 특정 폴더 안
+  const [currentFolderId, setCurrentFolderId] = useState(() => new URLSearchParams(location.search).get('folder')); // null = 루트, 특정 폴더 안
   const [filter, setFilter] = useState('');
   const [lineFilter, setLineFilter] = useState('');
 
@@ -404,7 +405,7 @@ export default function EquipmentList() {
                 <div>
                   <div style={{ fontSize: 18, fontWeight: 700 }}>{currentFolder.name}</div>
                   <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                    {[currentFolder.model, currentFolder.unit && `${currentFolder.unit}호기`, currentFolder.line, currentFolder.location].filter(Boolean).join(' · ')}
+                    {[currentFolder.model, currentFolder.unit && `${currentFolder.unit}호기`, currentFolder.line, currentFolder.location, currentFolder.deliveryDate && `납품일 ${currentFolder.deliveryDate}`].filter(Boolean).join(' · ')}
                     {currentFolder.memo && ` | ${currentFolder.memo}`}
                   </div>
                 </div>
@@ -502,7 +503,7 @@ export default function EquipmentList() {
                     </div>
 
                     <div className="equipment-card-meta">
-                      {[fd.model, fd.unit && `${fd.unit}호기`, fd.line, fd.location].filter(Boolean).join(' · ')}
+                      {[fd.model, fd.unit && `${fd.unit}호기`, fd.line, fd.location, fd.deliveryDate && `납품일 ${fd.deliveryDate}`].filter(Boolean).join(' · ')}
                     </div>
 
                     {/* 폴더 종합 진행률 */}
@@ -674,6 +675,16 @@ export default function EquipmentList() {
                 {editFolderItem ? '메인 설비 폴더 수정' : '메인 설비 폴더 생성'}
               </span>
               <button className="modal-close" onClick={() => setShowFolderModal(false)}>✕</button>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">납품일</label>
+              <input
+                className="form-input"
+                type="date"
+                value={folderForm.deliveryDate || ''}
+                onChange={(e) => setFolderForm({ ...folderForm, deliveryDate: e.target.value })}
+              />
             </div>
 
             <div className="form-group">
