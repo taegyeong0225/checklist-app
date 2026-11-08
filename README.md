@@ -172,7 +172,7 @@ checklist-app/
 │  │  └─ helpers.js   # 진행률·템플릿 항목 병합 도우미
 │  ├─ App.jsx         # 라우팅
 │  └─ index.css       # 공통 스타일
-├─ public/            # 정적 아이콘·리다이렉트 설정
+├─ public/            # 정적 아이콘
 ├─ supabase/schema.sql # 테이블·RLS·Realtime 설정 SQL
 ├─ .env.example       # Supabase 환경변수 예시
 ├─ package.json
@@ -184,3 +184,32 @@ checklist-app/
 - 같은 이메일 계정으로 로그인한 기기가 하나의 데이터 공간을 공유합니다.
 - 다른 사용자와의 공유, 조직별 권한, 공동 편집 충돌 해결은 아직 제공하지 않습니다.
 - Supabase 무료 플랜의 용량·전송량·휴면 정책이 적용됩니다.
+
+## 작업 내역
+
+### 2026-11-09 · GitHub Pages 배포 전환
+
+Netlify 크레딧 문제로 배포를 GitHub Pages로 옮겼습니다.
+
+- 배포 주소: https://taegyeong0225.github.io/checklist-app/
+- `main` 브랜치에 푸시하면 GitHub Actions(`.github/workflows/deploy.yml`)가 자동으로 빌드·배포합니다.
+- 빌드 시 Vite `base`를 `/checklist-app/`로 설정하고, `BrowserRouter`에 `basename`을 적용했습니다.
+- 하위 경로 새로고침 404 방지를 위해 빌드 결과의 `index.html`을 `404.html`로 복사합니다.
+- Supabase 환경변수는 저장소 **Settings → Secrets and variables → Actions**에 등록합니다.
+  - `VITE_SUPABASE_URL`
+  - `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `netlify.toml`, `public/_redirects`는 삭제했습니다.
+- 저장소 이름이 바뀌면 `vite.config.js`의 `base`도 함께 바꿔야 합니다.
+
+### 2026-11-09 · 셋업 리스트 `필수` 열 반영
+
+엑셀 셋업 리스트의 `필수` 열(Y/N)을 사용합니다.
+
+- 가져오기: `N`이면 선택 항목(`required: false`), `Y` 또는 빈 값이면 필수 항목입니다.
+- 설비 추가·일괄 추가 시 필수 항목만 기본으로 체크되어, 선택 항목은 직접 체크해야 체크리스트에 생성됩니다.
+- 모듈(구분)을 켜면 해당 구분의 필수 항목만 체크됩니다. 구분 전체가 선택 항목이면 모두 체크됩니다.
+- "전체 선택"은 선택 항목까지 모두 체크합니다.
+- 템플릿에 새로 추가된 선택 항목은 기존 체크리스트에 자동 추가되지 않습니다. 설비 설정에서 체크한 경우에만 추가됩니다.
+- 설비 설정·템플릿 관리 화면에 `선택` 배지를 표시하고, 템플릿 항목 편집 창에서 필수 여부를 바꿀 수 있습니다.
+- 템플릿 엑셀 내보내기 시 `필수` 열에 실제 값(Y/N)을 기록합니다.
+- 기존에 저장된 템플릿은 필수 정보가 없어 전부 필수로 처리됩니다. 엑셀을 다시 가져오면 반영됩니다.

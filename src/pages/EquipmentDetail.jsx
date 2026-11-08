@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { equipmentDB, checklistDB, resultDB, templateDB } from '../utils/db';
-import { calcProgress, formatDateTime } from '../utils/helpers';
+import { calcProgress, defaultCategoryItemIds, defaultInclusion, formatDateTime, isRequiredItem } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
 import ChecklistPage from './ChecklistPage';
 import { ArrowLeft, ClipboardList, Plus, ExternalLink, Pencil, CheckSquare, Square, Copy, ChevronDown, ChevronUp, Folder, Trash2 } from 'lucide-react';
@@ -61,10 +61,10 @@ export default function EquipmentDetail() {
     let incIds = equipment.includedItemIds;
 
     if (!incCats || incCats.length === 0) {
-      incCats = defTpl ? defTpl.categories.map((c) => c.name) : [];
+      incCats = defaultInclusion(defTpl).includedCategories;
     }
     if (!Array.isArray(incIds)) {
-      incIds = defTpl ? defTpl.categories.flatMap((c) => c.items.map((i) => i.id)) : [];
+      incIds = defaultInclusion(defTpl).includedItemIds;
     }
 
     setEditForm({
@@ -111,7 +111,7 @@ export default function EquipmentDetail() {
       .map((cat) => ({
         ...cat,
         items: (cat.items || [])
-          .filter((item) => !incItemIds || incItemIds.has(item.id))
+          .filter((item) => (incItemIds ? incItemIds.has(item.id) : isRequiredItem(item)))
           .map((item) => ({ ...item })),
       }))
       .filter((cat) => cat.items.length > 0);
@@ -127,6 +127,7 @@ export default function EquipmentDetail() {
       templateVersion: tpl.version,
       templateName: tpl.name,
       categories,
+      knownTemplateItemIds: (tpl.categories || []).flatMap((c) => (c.items || []).map((i) => String(i.id))),
       createdAt: new Date().toISOString(),
     };
 
@@ -204,7 +205,7 @@ export default function EquipmentDetail() {
         catItemIds.forEach((id) => curIds.delete(id));
       } else {
         curCats.add(catName);
-        catItemIds.forEach((id) => curIds.add(id));
+        defaultCategoryItemIds(cat).forEach((id) => curIds.add(id));
       }
 
       return {
@@ -595,7 +596,7 @@ export default function EquipmentDetail() {
                                   style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'flex-start', padding: '9px 0', textAlign: 'left', borderBottom: '1px solid #f1f5f9' }}
                                 >
                                   {isItemIncluded ? <CheckSquare size={17} color="var(--color-ok)" /> : <Square size={17} color="var(--color-text-muted)" />}
-                                  <span style={{ fontSize: 13, color: isItemIncluded ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{item.name}</span>
+                                  <span style={{ fontSize: 13, color: isItemIncluded ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{item.name}{item.required === false && <span className="badge badge-na" style={{ fontSize: 11, marginLeft: 6 }}>선택</span>}</span>
                                 </button>
                               );
                             })}

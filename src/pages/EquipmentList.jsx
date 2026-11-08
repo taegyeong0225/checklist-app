@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { folderDB, equipmentDB, checklistDB, resultDB, templateDB } from '../utils/db';
-import { calcProgress } from '../utils/helpers';
+import { calcProgress, defaultCategoryItemIds, defaultInclusion } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
 import {
   Folder, FolderPlus, Plus, Pencil, Trash2, ChevronRight,
@@ -195,8 +195,7 @@ export default function EquipmentList() {
   function openAddEquipment(presetFolderId = currentFolderId) {
     setEditEqItem(null);
     const defTpl = templates[0];
-    const allCatNames = defTpl ? defTpl.categories.map((c) => c.name) : [];
-    const allItemIds = defTpl ? defTpl.categories.flatMap((c) => c.items.map((i) => i.id)) : [];
+    const { includedCategories: allCatNames, includedItemIds: allItemIds } = defaultInclusion(defTpl);
 
     // 폴더 안에서 만들 경우 폴더 기본정보(모델, 호기, 라인 등)를 상속
     const parentFolder = folders.find((f) => f.id === presetFolderId);
@@ -223,10 +222,10 @@ export default function EquipmentList() {
     let incIds = eq.includedItemIds;
 
     if (!incCats || incCats.length === 0) {
-      incCats = defTpl ? defTpl.categories.map((c) => c.name) : [];
+      incCats = defaultInclusion(defTpl).includedCategories;
     }
     if (!Array.isArray(incIds)) {
-      incIds = defTpl ? defTpl.categories.flatMap((c) => c.items.map((i) => i.id)) : [];
+      incIds = defaultInclusion(defTpl).includedItemIds;
     }
 
     setEqForm({
@@ -283,8 +282,7 @@ export default function EquipmentList() {
     }
 
     const defTpl = templates[0];
-    const allCatNames = defTpl ? defTpl.categories.map((c) => c.name) : [];
-    const allItemIds = defTpl ? defTpl.categories.flatMap((c) => c.items.map((i) => i.id)) : [];
+    const { includedCategories: allCatNames, includedItemIds: allItemIds } = defaultInclusion(defTpl);
 
     for (const name of lines) {
       await equipmentDB.add({
@@ -359,7 +357,7 @@ export default function EquipmentList() {
         catItemIds.forEach((id) => curIds.delete(id));
       } else {
         curCats.add(catName);
-        catItemIds.forEach((id) => curIds.add(id));
+        defaultCategoryItemIds(cat).forEach((id) => curIds.add(id));
       }
 
       return {
@@ -902,7 +900,7 @@ export default function EquipmentList() {
                                   style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'flex-start', padding: '9px 0', textAlign: 'left', borderBottom: '1px solid #f1f5f9' }}
                                 >
                                   {isItemIncluded ? <CheckSquare size={17} color="var(--color-ok)" /> : <Square size={17} color="var(--color-text-muted)" />}
-                                  <span style={{ fontSize: 13, color: isItemIncluded ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{item.name}</span>
+                                  <span style={{ fontSize: 13, color: isItemIncluded ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{item.name}{item.required === false && <span className="badge badge-na" style={{ fontSize: 11, marginLeft: 6 }}>선택</span>}</span>
                                 </button>
                               );
                             })}

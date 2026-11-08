@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { parseCsvToTemplate } from './defaultTemplate';
+import { parseRequired } from './helpers';
 
 /**
  * 엑셀 또는 CSV 파일을 읽어 템플릿 구조로 변환
@@ -59,6 +60,7 @@ export async function parseTemplateFile(file) {
             const orderVal = colMap['순서'] !== undefined ? parseInt(row[colMap['순서']], 10) : 0;
             const note = colMap['비고'] !== undefined ? String(row[colMap['비고']] || '').trim() : '';
             const issue = colMap['이슈사항'] !== undefined ? String(row[colMap['이슈사항']] || '').trim() : '';
+            const required = colMap['필수'] !== undefined ? parseRequired(row[colMap['필수']]) : true;
 
             if (!categoriesMap.has(categoryName)) {
               categoriesMap.set(categoryName, {
@@ -75,6 +77,7 @@ export async function parseTemplateFile(file) {
               criteria: note || issue || '',
               note,
               issue,
+              required,
               order: isNaN(orderVal) ? cat.items.length + 1 : orderVal,
               inputType: 'status',
             });
@@ -213,7 +216,7 @@ export function exportTemplateToExcel(template) {
         item.name || '',
         item.criteria || '',
         item.note || '',
-        'Y',
+        item.required === false ? 'N' : 'Y',
         item.id || '',
         category.categoryId || category.name,
         item.order || index + 1,

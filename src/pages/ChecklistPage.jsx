@@ -65,11 +65,13 @@ export default function ChecklistPage({ embedded = false, equipmentId: embeddedE
     // 🌟 최신 마스터 템플릿과 자동 동기화 (행 삽입 등 신규 항목 반영)
     const masterTpl = tpls.find((t) => t.id === cl.templateId) || tpls[0];
     if (masterTpl) {
-      const { updatedChecklist, addedCount } = syncChecklistWithTemplate(cl, masterTpl, eq);
-      if (addedCount > 0) {
+      const resultIds = new Set(rs.map((r) => String(r.itemId)));
+      const { updatedChecklist, addedCount, restoredCount, changed } = syncChecklistWithTemplate(cl, masterTpl, eq, resultIds);
+      if (changed) {
         await checklistDB.put(updatedChecklist);
         setChecklist(updatedChecklist);
-        addToast(`✨ 템플릿에 새로 추가된 ${addedCount}개 항목이 이 설비에 자동 반영되었습니다!`, 'success', 4500);
+        if (restoredCount > 0) addToast(`🛟 점검 기록이 남아있던 항목 ${restoredCount}개를 복구했습니다.`, 'success', 5000);
+        if (addedCount > 0) addToast(`✨ 템플릿 변경사항과 신규 항목 ${addedCount}개를 반영했습니다!`, 'success', 4500);
       } else {
         setChecklist(cl);
       }
@@ -86,11 +88,13 @@ export default function ChecklistPage({ embedded = false, equipmentId: embeddedE
       addToast('동기화할 마스터 템플릿이 없습니다.', 'error');
       return;
     }
-    const { updatedChecklist, addedCount } = syncChecklistWithTemplate(checklist, masterTpl, equipment);
-    await checklistDB.put(updatedChecklist);
-    setChecklist(updatedChecklist);
-    if (addedCount > 0) {
-      addToast(`✨ 신규 항목 ${addedCount}개가 동기화되었습니다!`, 'success');
+    const resultIds = new Set(results.map((r) => String(r.itemId)));
+    const { updatedChecklist, addedCount, restoredCount, changed } = syncChecklistWithTemplate(checklist, masterTpl, equipment, resultIds);
+    if (changed) {
+      await checklistDB.put(updatedChecklist);
+      setChecklist(updatedChecklist);
+      if (restoredCount > 0) addToast(`🛟 점검 기록이 남아있던 항목 ${restoredCount}개를 복구했습니다.`, 'success', 5000);
+      addToast(addedCount > 0 ? `✨ 템플릿 변경사항과 신규 항목 ${addedCount}개를 반영했습니다!` : '템플릿 변경사항을 반영했습니다.', 'success');
     } else {
       addToast('이미 마스터 템플릿과 최신 상태로 일치합니다.', 'default');
     }

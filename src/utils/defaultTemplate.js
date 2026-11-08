@@ -77,6 +77,7 @@ export function parseCsvToTemplate(csvText, templateName = "MMI 셋업 리스트
     const note = getVal('비고');
     const issue = getVal('이슈사항');
     const orderStr = getVal('순서');
+    const required = getVal('필수').toUpperCase() !== 'N';
     const order = orderStr ? parseInt(orderStr, 10) : 0;
 
     if (!categoriesMap.has(categoryName)) {
@@ -94,6 +95,7 @@ export function parseCsvToTemplate(csvText, templateName = "MMI 셋업 리스트
       criteria: note || issue || '',
       note: note || '',
       issue: issue || '',
+      required,
       order: isNaN(order) ? cat.items.length + 1 : order,
       inputType: 'status',
     });

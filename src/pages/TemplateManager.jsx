@@ -1,12 +1,12 @@
 // 템플릿 관리 페이지 (설비 자동 일괄 동기화 지원)
 import { useEffect, useState } from 'react';
-import { templateDB, checklistDB, equipmentDB } from '../utils/db';
+import { templateDB, checklistDB, equipmentDB, resultDB } from '../utils/db';
 import { parseTemplateFile, exportTemplateToExcel } from '../utils/excel';
-import { syncChecklistWithTemplate, formatDateTime } from '../utils/helpers';
+import { syncChecklistWithTemplate, formatDateTime, preserveTemplateItemIds } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
 import { Plus, Upload, Pencil, Trash2, ChevronDown, ChevronRight, ClipboardList, RefreshCw, FileText, Download } from 'lucide-react';
 
-const EMPTY_ITEM = { name: '', criteria: '', inputType: 'status', order: 0 };
+const EMPTY_ITEM = { name: '', criteria: '', inputType: 'status', order: 0, required: true };
 
 export default function TemplateManager() {
   const [templates, setTemplates] = useState([]);
@@ -31,9 +31,10 @@ export default function TemplateManager() {
 
   // 기존 설비 체크리스트들에 템플릿 변경사항(행 삽입/신규 항목) 일괄 동기화
   async function syncAllChecklistsWithTemplate(templateObj) {
-    const [allCls, allEqs] = await Promise.all([
+    const [allCls, allEqs, allResults] = await Promise.all([
       checklistDB.getAll(),
       equipmentDB.getAll(),
+      resultDB.getAll(),
     ]);
 
     let totalUpdated = 0;
@@ -43,9 +44,15 @@ export default function TemplateManager() {
       // 해당 템플릿을 사용 중인 체크리스트
       if (cl.templateId === templateObj.id || !cl.templateId) {
         const eq = allEqs.find((e) => e.id === cl.equipmentId);
-        const { updatedChecklist, addedCount } = syncChecklistWithTemplate(cl, templateObj, eq);
-        if (addedCount > 0) {
+        const resultIds = new Set(allResults.filter((r) => r.checklistId === cl.id).map((r) => String(r.itemId)));
+        const { updatedChecklist, addedCount, addedItemIds, changed } = syncChecklistWithTemplate(cl, templateObj, eq, resultIds);
+        if (changed) {
           await checklistDB.put(updatedChecklist);
+          // 설비 설정 화면에도 신규 항목이 체크된 상태로 보이도록 포함 목록 갱신
+          if (eq && Array.isArray(eq.includedItemIds) && addedItemIds.length > 0) {
+            eq.includedItemIds = [...new Set([...eq.includedItemIds.map(String), ...addedItemIds])];
+            await equipmentDB.put(eq);
+          }
           totalUpdated++;
           totalItemsAdded += addedCount;
         }
@@ -59,7 +66,7 @@ export default function TemplateManager() {
     const file = e.target.files[0];
     if (!file) return;
     try {
-      const parsed = await parseTemplateFile(file);
+      let parsed = await parseTemplateFile(file);
       // 버전 계산
       const existing = templates.find((t) => t.name === parsed.name);
       let version = 'v1.0';
@@ -68,6 +75,8 @@ export default function TemplateManager() {
         version = `v${verNum.toFixed(1)}`;
       }
       parsed.version = version;
+      // 기존 항목 ID 유지 (ID가 바뀌면 설비 점검 결과와 연결이 끊어짐)
+      parsed = preserveTemplateItemIds(parsed, existing);
 
       let savedId;
       if (existing) {
@@ -83,8 +92,8 @@ export default function TemplateManager() {
       const { totalUpdated, totalItemsAdded } = await syncAllChecklistsWithTemplate(updatedTpl);
 
       addToast(`템플릿 "${parsed.name}"을 반영했습니다. (${version})`, 'success');
-      if (totalItemsAdded > 0) {
-        addToast(`✨ 기존 ${totalUpdated}개 설비에 신규 항목 ${totalItemsAdded}개가 자동 반영되었습니다!`, 'success', 5000);
+      if (totalUpdated > 0) {
+        addToast(`✨ 기존 ${totalUpdated}개 설비 시트에 템플릿 변경사항을 반영했습니다.${totalItemsAdded ? ` 신규 항목 ${totalItemsAdded}개 포함` : ''}`, 'success', 5000);
       }
 
       load();
@@ -119,8 +128,8 @@ export default function TemplateManager() {
     const { totalUpdated, totalItemsAdded } = await syncAllChecklistsWithTemplate(updated);
 
     addToast(`템플릿을 저장했습니다. (${updated.version})`, 'success');
-    if (totalItemsAdded > 0) {
-      addToast(`✨ 기존 ${totalUpdated}개 설비에 신규 항목 ${totalItemsAdded}개가 자동 반영되었습니다!`, 'success', 5000);
+    if (totalUpdated > 0) {
+      addToast(`✨ 기존 ${totalUpdated}개 설비 시트에 템플릿 변경사항을 반영했습니다.${totalItemsAdded ? ` 신규 항목 ${totalItemsAdded}개 포함` : ''}`, 'success', 5000);
     }
 
     load();
@@ -139,8 +148,8 @@ export default function TemplateManager() {
     setSyncingAll(true);
     try {
       const { totalUpdated, totalItemsAdded } = await syncAllChecklistsWithTemplate(selected);
-      if (totalItemsAdded > 0) {
-        addToast(`✨ 기존 ${totalUpdated}개 설비에 신규 항목 ${totalItemsAdded}개가 즉시 동기화되었습니다!`, 'success');
+      if (totalUpdated > 0) {
+        addToast(`✨ 기존 ${totalUpdated}개 설비 시트에 템플릿 변경사항을 반영했습니다.${totalItemsAdded ? ` 신규 항목 ${totalItemsAdded}개 포함` : ''}`, 'success');
       } else {
         addToast('모든 설비가 이미 최신 템플릿과 일치합니다.', 'default');
       }
@@ -351,7 +360,10 @@ export default function TemplateManager() {
                               {item.order || itemIdx + 1}
                             </span>
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 14, fontWeight: 500 }}>{item.name}</div>
+                              <div style={{ fontSize: 14, fontWeight: 500 }}>
+                                {item.name}
+                                {item.required === false && <span className="badge badge-na" style={{ fontSize: 11, marginLeft: 6 }}>선택</span>}
+                              </div>
                               {item.criteria && <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{item.criteria}</div>}
                             </div>
                             {item.id && !item.id.startsWith('ITEM_') && !item.id.startsWith('LEGACY_') && (
@@ -445,6 +457,11 @@ export default function TemplateManager() {
                 </select>
               </div>
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, marginBottom: 12, cursor: 'pointer' }}>
+              <input type="checkbox" checked={itemForm.required !== false}
+                onChange={(e) => setItemForm((f) => ({ ...f, required: e.target.checked }))} />
+              필수 항목 (해제 시 체크리스트 생성 때 기본으로 빠짐)
+            </label>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setShowItemModal(null)}>취소</button>
               <button className="btn btn-primary" onClick={saveItem}>저장</button>
