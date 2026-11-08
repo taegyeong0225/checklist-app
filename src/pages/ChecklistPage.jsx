@@ -33,6 +33,14 @@ export default function ChecklistPage({ embedded = false, equipmentId: embeddedE
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const saveTimer = useRef(null);
+  const resultsRef = useRef(results);
+  useEffect(() => { resultsRef.current = results; }, [results]);
+  const pendingWrites = useRef({});
+
+  // 화면을 벗어날 때 아직 저장되지 않은 비고/측정값 저장
+  useEffect(() => () => {
+    Object.keys(pendingWrites.current).forEach((key) => flushField(key));
+  }, [clId]);
 
   useEffect(() => {
     loadAndSync();
@@ -122,10 +130,15 @@ export default function ChecklistPage({ embedded = false, equipmentId: embeddedE
     scheduleSave();
   }
 
-  async function handleField(itemId, field, value) {
-    const r = getResult(itemId);
-    const data = { status: r.status || 'pending', ...r, [field]: value };
-    await resultDB.upsert(clId, itemId, data);
+  // 입력은 화면에 즉시 반영하고, 서버 저장은 입력이 멈춘 뒤 한 번만 수행
+  // (키 입력마다 저장 완료를 기다리면 글자가 밀리고 한글 조합이 깨짐)
+  function handleField(itemId, field, value) {
+    const key = String(itemId);
+    const entry = pendingWrites.current[key] || { itemId };
+    clearTimeout(entry.timer);
+    entry.timer = setTimeout(() => flushField(key), 600);
+    pendingWrites.current[key] = entry;
+    setSaving(true);
     setResults((prev) => {
       const idx = prev.findIndex((r) => String(r.itemId) === String(itemId));
       if (idx >= 0) {
@@ -135,7 +148,25 @@ export default function ChecklistPage({ embedded = false, equipmentId: embeddedE
       }
       return [...prev, { itemId, checklistId: clId, [field]: value, updatedAt: new Date().toISOString() }];
     });
-    scheduleSave();
+  }
+
+  async function flushField(key) {
+    const entry = pendingWrites.current[key];
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    delete pendingWrites.current[key];
+    const r = resultsRef.current.find((item) => String(item.itemId) === key) || {};
+    try {
+      const id = await resultDB.upsert(clId, entry.itemId, { status: r.status || 'pending', ...r });
+      if (!r.id && id) {
+        setResults((prev) => prev.map((item) => (String(item.itemId) === key && !item.id ? { ...item, id } : item)));
+      }
+      scheduleSave();
+    } catch (error) {
+      console.error(error);
+      setSaving(false);
+      addToast('비고 저장에 실패했습니다. 네트워크를 확인하세요.', 'error');
+    }
   }
 
   function scheduleSave() {
