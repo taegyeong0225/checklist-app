@@ -70,6 +70,7 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 /* Main content */
 .main-content {
   margin-left: 220px;
+  min-width: 0; /* 넓은 표가 화면 폭을 늘리지 않도록 (표는 .table-wrap 안에서 가로 스크롤) */
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -410,3 +411,10 @@ tr:hover td { background: #f8fafc; }
 .auth-card p { margin: 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.5; }
 .auth-actions { display: flex; gap: 8px; }
 .auth-message { color: var(--color-primary) !important; }
+
+/* iOS Safari는 글자 크기 16px 미만 입력칸에 포커스하면 화면을 자동 확대함 → 모바일에서 16px 유지 */
+@media (max-width: 768px) {
+  input, select, textarea,
+  .form-input, .form-select,
+  .filter-bar .form-input, .filter-bar .form-select { font-size: 16px; }
+}

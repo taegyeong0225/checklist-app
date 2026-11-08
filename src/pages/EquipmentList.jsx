@@ -182,9 +182,18 @@ export default function EquipmentList() {
   }
 
   async function handleDeleteFolder(fd) {
-    if (!confirm(`"${fd.name}" 폴더를 삭제하시겠습니까?\n소속된 하위 설비는 단독 설비로 보존됩니다.`)) return;
-    await folderDB.delete(fd.id);
-    addToast('폴더를 삭제했습니다.');
+    const childCount = equipments.filter((e) => e.folderId === fd.id).length;
+    if (!confirm(`"${fd.name}" 폴더를 삭제하시겠습니까?\n소속된 하위 설비 ${childCount}대와 체크리스트·점검 기록·사진도 함께 삭제되며 되돌릴 수 없습니다.`)) return;
+    try {
+      await equipmentDB.deleteByFolderId(fd.id);
+      await folderDB.delete(fd.id);
+    } catch (error) {
+      console.error(error);
+      addToast(`삭제 실패: ${error.message}`, 'error');
+      load();
+      return;
+    }
+    addToast(`폴더와 하위 설비 ${childCount}대를 삭제했습니다.`);
     if (currentFolderId === fd.id) setCurrentFolderId(null);
     load();
   }

@@ -95,6 +95,12 @@ export const equipmentDB = {
     data: dataOnly(record, ['folderId']),
   }, mapEquipment),
   delete: (id) => remove('equipments', id),
+  // 체크리스트·점검 결과·사진은 FK on delete cascade로 함께 삭제됨
+  deleteByFolderId: async (folderId) => {
+    const { error } = await client().from('equipments').delete().eq('folder_id', folderId);
+    throwIfError(error);
+    markLocalWrite();
+  },
 };
 
 export const checklistDB = {
