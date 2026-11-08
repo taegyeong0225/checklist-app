@@ -418,3 +418,20 @@ tr:hover td { background: #f8fafc; }
   .form-input, .form-select,
   .filter-bar .form-input, .filter-bar .form-select { font-size: 16px; }
 }
+
+/* 이슈 리스트 */
+.issue-table td { vertical-align: top; }
+.issue-text { white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+.issue-actions { white-space: nowrap; text-align: right; }
+@media (max-width: 768px) {
+  /* 모바일: 행을 카드 형태로 */
+  .issue-table thead { display: none; }
+  .issue-table, .issue-table tbody, .issue-table tr, .issue-table td { display: block; width: 100%; }
+  .issue-table tr { position: relative; padding: 12px 14px; border-bottom: 1px solid var(--color-border); }
+  .issue-table td { padding: 4px 0; border: none; }
+  .issue-table td[data-label="이슈"]::before,
+  .issue-table td[data-label="해결방안"]::before {
+    content: attr(data-label); display: block; font-size: 12px; font-weight: 600; color: var(--color-text-muted); margin-top: 6px;
+  }
+  .issue-table .issue-actions { position: absolute; top: 8px; right: 8px; width: auto; }
+}

@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Server, ClipboardList, Settings, Download, Upload, Menu, X
+  LayoutDashboard, Server, ClipboardList, Settings, Download, Upload, Menu, X, Wrench
 } from 'lucide-react';
 import { useState } from 'react';
 import { exportAllData, importAllData } from '../utils/db';
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { to: '/', label: '대시보드', icon: LayoutDashboard },
   { to: '/equipments', label: '설비 목록', icon: Server },
   { to: '/templates', label: '템플릿 관리', icon: ClipboardList },
+  { to: '/issues', label: '이슈 리스트', icon: Wrench },
 ];
 
 export default function Layout({ children }) {
@@ -134,6 +135,7 @@ function PageTitle() {
     '/': '대시보드',
     '/equipments': '설비 목록',
     '/templates': '템플릿 관리',
+    '/issues': '이슈 리스트',
   };
   const base = '/' + pathname.split('/')[1];
   if (pathname.includes('/equipments/') && pathname.includes('/checklist')) return <span className="topbar-title">점검 화면</span>;

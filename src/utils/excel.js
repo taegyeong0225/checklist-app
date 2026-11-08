@@ -203,34 +203,27 @@ export function exportChecklistToExcel(equipment, checklist, results) {
  */
 export function exportTemplateToExcel(template) {
   const wb = XLSX.utils.book_new();
-  const rows = [[
-    '구분', '순서', '체크 항목', '확인사항', '비고', '필수',
-    'item_id', 'category_id', 'sort_order', 'source_row', 'active',
-  ]];
+  // 원본 셋업 리스트와 같은 6개 열만 내보냄 (item_id 등 내부 ID는 제외, 가져오기 시 이름으로 기존 ID 복원)
+  const rows = [['구분', '순서', '체크 항목', '이슈사항', '비고', '필수']];
 
   for (const category of template.categories || []) {
     (category.items || []).forEach((item, index) => {
+      const note = item.note || '';
+      // 앱에서 입력한 확인 기준(criteria)이 비고와 다르면 이슈사항 열에 보존 → 다시 가져와도 유지
+      const issue = item.issue || (item.criteria && item.criteria !== note ? item.criteria : '');
       rows.push([
         category.name,
         item.order || index + 1,
         item.name || '',
-        item.criteria || '',
-        item.note || '',
+        issue,
+        note,
         item.required === false ? 'N' : 'Y',
-        item.id || '',
-        category.categoryId || category.name,
-        item.order || index + 1,
-        '',
-        'Y',
       ]);
     });
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [
-    { wch: 22 }, { wch: 8 }, { wch: 42 }, { wch: 34 }, { wch: 22 }, { wch: 8 },
-    { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
-  ];
+  ws['!cols'] = [{ wch: 22 }, { wch: 8 }, { wch: 42 }, { wch: 34 }, { wch: 22 }, { wch: 8 }];
   XLSX.utils.book_append_sheet(wb, ws, 'MMI 셋업 리스트');
   const safeName = (template.name || 'MMI_셋업_리스트').replace(/[\\/:*?"<>|]/g, '_');
   XLSX.writeFile(wb, `${safeName}_${formatDate(new Date())}.xlsx`);

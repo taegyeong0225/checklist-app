@@ -73,7 +73,16 @@ create policy "owner access" on public.photos for all using (owner_id = (select 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on table public.templates, public.folders, public.equipments, public.checklists, public.results, public.photos to authenticated;
 
-alter publication supabase_realtime add table public.templates, public.folders, public.equipments, public.checklists, public.results;
+-- Realtime 대상 테이블 등록 (이미 등록된 테이블은 건너뜀 → 여러 번 실행해도 안전)
+do $$
+declare t text;
+begin
+  foreach t in array array['templates','folders','equipments','checklists','results'] loop
+    if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;
 
 create index if not exists equipments_folder_id_idx   on public.equipments (folder_id);
 create index if not exists checklists_equipment_id_idx on public.checklists (equipment_id);
@@ -85,3 +94,16 @@ create index if not exists equipments_owner_id_idx on public.equipments (owner_i
 create index if not exists checklists_owner_id_idx on public.checklists (owner_id);
 create index if not exists results_owner_id_idx    on public.results (owner_id);
 create index if not exists photos_owner_id_idx     on public.photos (owner_id);
+
+-- 이슈 리스트 (supabase/issues.sql과 동일)
+create table if not exists public.issues (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists issues_owner_id_idx on public.issues (owner_id);
+alter table public.issues enable row level security;
+drop policy if exists "owner access" on public.issues;
+create policy "owner access" on public.issues for all using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+grant select, insert, update, delete on table public.issues to authenticated;

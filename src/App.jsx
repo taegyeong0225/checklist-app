@@ -8,6 +8,7 @@ import EquipmentList from './pages/EquipmentList';
 import EquipmentDetail from './pages/EquipmentDetail';
 import ChecklistPage from './pages/ChecklistPage';
 import TemplateManager from './pages/TemplateManager';
+import IssueList from './pages/IssueList';
 import { supabase } from './lib/supabase';
 
 function RealtimeRefresh({ children }) {
@@ -36,6 +37,7 @@ export default function App() {
                 <Route path="/equipments/:id" element={<EquipmentDetail />} />
                 <Route path="/equipments/:equipmentId/checklist/:checklistId" element={<ChecklistPage />} />
                 <Route path="/templates" element={<TemplateManager />} />
+                <Route path="/issues" element={<IssueList />} />
               </Routes>
             </Layout>
           </ToastProvider>

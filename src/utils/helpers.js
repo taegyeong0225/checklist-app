@@ -12,10 +12,12 @@ export function preserveTemplateItemIds(template, previousTemplate = null) {
   if (!template) return template;
   const byCatName = new Map();
   const byName = new Map();
-  const register = (tpl) => {
+  // keepGenerated: 이전 템플릿의 ITEM_ ID도 기억 (앱에서 추가한 항목은 ITEM_..._시간값 형태라 이름으로 재생성되지 않음)
+  const register = (tpl, keepGenerated = false) => {
     for (const cat of (tpl?.categories || [])) {
       for (const item of (cat.items || [])) {
-        if (!item.id || String(item.id).startsWith('ITEM_') || String(item.id).startsWith('LEGACY_')) continue;
+        const rawId = String(item.id || '');
+        if (!rawId || rawId.startsWith('LEGACY_') || (!keepGenerated && rawId.startsWith('ITEM_'))) continue;
         const k = normKey(cat.name) + '|' + normKey(item.name);
         if (!byCatName.has(k)) byCatName.set(k, String(item.id));
         const n = normKey(item.name);
@@ -23,7 +25,7 @@ export function preserveTemplateItemIds(template, previousTemplate = null) {
       }
     }
   };
-  register(previousTemplate);
+  register(previousTemplate, true);
   register(DEFAULT_MASTER_TEMPLATE);
 
   let changed = false;
@@ -33,7 +35,7 @@ export function preserveTemplateItemIds(template, previousTemplate = null) {
       const id = String(item.id || '');
       if (id && !id.startsWith('ITEM_') && !id.startsWith('LEGACY_')) return item;
       const legacy = byCatName.get(normKey(cat.name) + '|' + normKey(item.name)) || byName.get(normKey(item.name));
-      if (!legacy || used.has(legacy)) return item;
+      if (!legacy || legacy === id || used.has(legacy)) return item;
       used.add(legacy);
       changed = true;
       return { ...item, id: legacy };

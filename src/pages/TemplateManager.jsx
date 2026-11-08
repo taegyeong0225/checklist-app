@@ -347,11 +347,6 @@ export default function TemplateManager() {
                               </div>
                               {item.criteria && <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{item.criteria}</div>}
                             </div>
-                            {item.id && !item.id.startsWith('ITEM_') && !item.id.startsWith('LEGACY_') && (
-                              <span className="badge badge-na" style={{ fontSize: 11 }}>
-                                {item.id}
-                              </span>
-                            )}
                             <button className="btn-icon" onClick={() => openItemModal(catIdx, itemIdx)}>
                               <Pencil size={13} />
                             </button>

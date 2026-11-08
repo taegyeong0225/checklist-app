@@ -158,11 +158,23 @@ export const photoDB = {
   delete: (id) => remove('photos', id),
 };
 
+// 이슈 리스트 (트러블슈팅): { equipmentName, issue, solution, updatedAt }
+export const issueDB = {
+  getAll: () => getAll('issues'),
+  add: async (record) => (await insert('issues', { data: dataOnly(record) })).id,
+  put: (record) => update('issues', record.id, { data: dataOnly(record) }),
+  delete: (id) => remove('issues', id),
+};
+
+/** issues 테이블이 아직 없을 때 (supabase/issues.sql 미실행) */
+export const isMissingTableError = (error) => ['42P01', 'PGRST205'].includes(error?.code);
+
 export async function exportAllData() {
-  const [templates, folders, equipments, checklists, results, photos] = await Promise.all([
+  const [templates, folders, equipments, checklists, results, photos, issues] = await Promise.all([
     templateDB.getAll(), folderDB.getAll(), equipmentDB.getAll(), checklistDB.getAll(), resultDB.getAll(), getAll('photos', mapPhoto),
+    issueDB.getAll().catch((error) => { if (isMissingTableError(error)) return []; throw error; }),
   ]);
-  return { templates, folders, equipments, checklists, results, photos, exportedAt: new Date().toISOString() };
+  return { templates, folders, equipments, checklists, results, photos, issues, exportedAt: new Date().toISOString() };
 }
 
 export async function importAllData(backup) {
@@ -173,6 +185,7 @@ export async function importAllData(backup) {
     ['checklists', backup.checklists, (item) => ({ id: item.id, equipment_id: item.equipmentId, template_id: item.templateId || null, data: dataOnly(item, ['equipmentId', 'templateId']) })],
     ['results', backup.results, (item) => ({ id: item.id, checklist_id: item.checklistId, item_id: String(item.itemId), data: dataOnly(item, ['checklistId', 'itemId', 'updatedAt']) })],
     ['photos', backup.photos, (item) => ({ id: item.id, result_id: item.resultId, data: dataOnly(item, ['resultId']) })],
+    ['issues', backup.issues, (item) => ({ id: item.id, data: dataOnly(item) })],
   ];
   for (const [table, items, map] of records) {
     if (!items?.length) continue;
