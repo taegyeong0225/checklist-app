@@ -1,6 +1,6 @@
 // 설비 목록 페이지 - 폴더(메인 설비 그룹) & 단위 설비 계층 구조 지원
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { folderDB, equipmentDB, checklistDB, resultDB, templateDB } from '../utils/db';
 import { calcProgress } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
@@ -9,13 +9,14 @@ import {
   Server, ArrowLeft, CheckSquare, Square, ChevronDown, ChevronUp, Layers, Sparkles, Copy
 } from 'lucide-react';
 
-const EMPTY_FOLDER = { name: '', model: '', unit: '', line: '', location: '', memo: '' };
+const EMPTY_FOLDER = { name: '', model: '', unit: '', line: '', location: '', deliveryDate: '', memo: '' };
 const EMPTY_EQUIPMENT = {
   name: '',
   model: '',
   unit: '',
   line: '',
   location: '',
+  turnOnDate: '',
   folderId: null,
   templateId: '',
   includedCategories: [],
@@ -37,13 +38,14 @@ const DEFAULT_PRESET_UNITS = [
 ];
 
 export default function EquipmentList() {
+  const location = useLocation();
   const [folders, setFolders] = useState([]);
   const [equipments, setEquipments] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [folderProgressMap, setFolderProgressMap] = useState({}); // folderId -> { pct, total, done, ng }
   const [eqProgressMap, setEqProgressMap] = useState({});         // eqId -> { pct, ng, pending }
 
-  const [currentFolderId, setCurrentFolderId] = useState(null); // null = 루트, number = 특정 폴더 안
+  const [currentFolderId, setCurrentFolderId] = useState(() => new URLSearchParams(location.search).get('folder')); // null = 루트, 특정 폴더 안
   const [filter, setFilter] = useState('');
   const [lineFilter, setLineFilter] = useState('');
 
@@ -148,8 +150,8 @@ export default function EquipmentList() {
     const sourceEquipments = equipments.filter((equipment) => equipment.folderId === sourceFolderId);
 
     for (const sourceEquipment of sourceEquipments) {
-      const { id, createdAt, folderId, ...equipmentData } = sourceEquipment;
-      const targetEquipmentId = await equipmentDB.add({ ...equipmentData, folderId: targetFolderId });
+      const { id, createdAt, folderId, turnOnDate, ...equipmentData } = sourceEquipment;
+      const targetEquipmentId = await equipmentDB.add({ ...equipmentData, folderId: targetFolderId, turnOnDate: '' });
       const equipmentChecklists = sourceChecklists.filter((checklist) => checklist.equipmentId === id);
 
       for (const sourceChecklist of equipmentChecklists) {
@@ -223,7 +225,7 @@ export default function EquipmentList() {
     if (!incCats || incCats.length === 0) {
       incCats = defTpl ? defTpl.categories.map((c) => c.name) : [];
     }
-    if (!incIds || incIds.length === 0) {
+    if (!Array.isArray(incIds)) {
       incIds = defTpl ? defTpl.categories.flatMap((c) => c.items.map((i) => i.id)) : [];
     }
 
@@ -368,6 +370,19 @@ export default function EquipmentList() {
     });
   }
 
+  function toggleItem(cat, item) {
+    setEqForm((f) => {
+      const curCats = new Set(f.includedCategories || []);
+      const curIds = new Set(f.includedItemIds || []);
+      if (curIds.has(item.id)) curIds.delete(item.id);
+      else {
+        curCats.add(cat.name);
+        curIds.add(item.id);
+      }
+      return { ...f, includedCategories: Array.from(curCats), includedItemIds: Array.from(curIds) };
+    });
+  }
+
   return (
     <div>
       {/* ───── 최상위 브레드크럼 & 헤더 ───── */}
@@ -391,7 +406,7 @@ export default function EquipmentList() {
                 <div>
                   <div style={{ fontSize: 18, fontWeight: 700 }}>{currentFolder.name}</div>
                   <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                    {[currentFolder.model, currentFolder.unit && `${currentFolder.unit}호기`, currentFolder.line, currentFolder.location].filter(Boolean).join(' · ')}
+                    {[currentFolder.model, currentFolder.unit && `${currentFolder.unit}호기`, currentFolder.line, currentFolder.location, currentFolder.deliveryDate && `납품일 ${currentFolder.deliveryDate}`].filter(Boolean).join(' · ')}
                     {currentFolder.memo && ` | ${currentFolder.memo}`}
                   </div>
                 </div>
@@ -489,7 +504,7 @@ export default function EquipmentList() {
                     </div>
 
                     <div className="equipment-card-meta">
-                      {[fd.model, fd.unit && `${fd.unit}호기`, fd.line, fd.location].filter(Boolean).join(' · ')}
+                      {[fd.model, fd.unit && `${fd.unit}호기`, fd.line, fd.location, fd.deliveryDate && `납품일 ${fd.deliveryDate}`].filter(Boolean).join(' · ')}
                     </div>
 
                     {/* 폴더 종합 진행률 */}
@@ -589,7 +604,10 @@ export default function EquipmentList() {
                   onClick={() => navigate(`/equipments/${eq.id}`)}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                    <div className="equipment-card-name" style={{ fontSize: 15 }}>{eq.name}</div>
+                    <div className="equipment-card-name" style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 15 }}>
+                      <span title={eq.turnOnDate ? `TURN ON ${eq.turnOnDate}` : 'TURN ON 미설정'} style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, background: eq.turnOnDate ? 'var(--color-ok)' : 'var(--color-ng)' }} />
+                      {eq.name}
+                    </div>
                     <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-primary)' }}>
                       {prog.pct}%
                     </span>
@@ -661,6 +679,16 @@ export default function EquipmentList() {
                 {editFolderItem ? '메인 설비 폴더 수정' : '메인 설비 폴더 생성'}
               </span>
               <button className="modal-close" onClick={() => setShowFolderModal(false)}>✕</button>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">납품일</label>
+              <input
+                className="form-input"
+                type="date"
+                value={folderForm.deliveryDate || ''}
+                onChange={(e) => setFolderForm({ ...folderForm, deliveryDate: e.target.value })}
+              />
             </div>
 
             <div className="form-group">
@@ -746,21 +774,6 @@ export default function EquipmentList() {
               <button className="modal-close" onClick={() => setShowEqModal(false)}>✕</button>
             </div>
 
-            {/* 소속 폴더 선택 */}
-            <div className="form-group">
-              <label className="form-label">소속 메인 설비 폴더</label>
-              <select
-                className="form-select"
-                value={eqForm.folderId || ''}
-                onChange={(e) => setEqForm({ ...eqForm, folderId: e.target.value || null })}
-              >
-                <option value="">- 단독 설비 (폴더 없음) -</option>
-                {folders.map((f) => (
-                  <option key={f.id} value={f.id}>📁 {f.name} ({f.unit ? `${f.unit}호기` : f.line || ''})</option>
-                ))}
-              </select>
-            </div>
-
             <div className="form-group">
               <label className="form-label">단위 설비명 *</label>
               <input
@@ -772,26 +785,19 @@ export default function EquipmentList() {
               />
             </div>
 
-            <div className="grid-2">
-              <div className="form-group">
-                <label className="form-label">모델</label>
-                <input className="form-input" value={eqForm.model} onChange={(e) => setEqForm({ ...eqForm, model: e.target.value })} placeholder="예: GEN2" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">호기</label>
-                <input className="form-input" value={eqForm.unit} onChange={(e) => setEqForm({ ...eqForm, unit: e.target.value })} placeholder="예: 3" />
-              </div>
+            <div className="form-group">
+              <label className="form-label">호기</label>
+              <input className="form-input" value={eqForm.unit} onChange={(e) => setEqForm({ ...eqForm, unit: e.target.value })} placeholder="예: 3" />
             </div>
 
-            <div className="grid-2">
-              <div className="form-group">
-                <label className="form-label">라인</label>
-                <input className="form-input" value={eqForm.line} onChange={(e) => setEqForm({ ...eqForm, line: e.target.value })} placeholder="예: A라인" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">위치</label>
-                <input className="form-input" value={eqForm.location} onChange={(e) => setEqForm({ ...eqForm, location: e.target.value })} placeholder="예: 1공장 2층" />
-              </div>
+            <div className="form-group">
+              <label className="form-label">위치</label>
+              <input className="form-input" value={eqForm.location} onChange={(e) => setEqForm({ ...eqForm, location: e.target.value })} placeholder="예: 1공장 2층" />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">TURN ON 일자</label>
+              <input className="form-input" type="date" value={eqForm.turnOnDate || ''} onChange={(e) => setEqForm({ ...eqForm, turnOnDate: e.target.value })} />
             </div>
 
             {/* 포함 모듈/카테고리 선택 */}
@@ -871,8 +877,37 @@ export default function EquipmentList() {
                             <span className="badge badge-na" style={{ fontSize: 11 }}>
                               {cat.items.length}개 항목
                             </span>
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedCats((state) => ({ ...state, [cat.name]: !state[cat.name] }));
+                              }}
+                              title="하위 항목 선택"
+                            >
+                              {expandedCats[cat.name] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </button>
                           </div>
                         </div>
+                        {isCatIncluded && expandedCats[cat.name] && (
+                          <div style={{ padding: '0 14px 12px', borderTop: '1px solid var(--color-border)' }}>
+                            {cat.items.map((item) => {
+                              const isItemIncluded = (eqForm.includedItemIds || []).includes(item.id);
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => toggleItem(cat, item)}
+                                  style={{ display: 'flex', width: '100%', gap: 8, alignItems: 'flex-start', padding: '9px 0', textAlign: 'left', borderBottom: '1px solid #f1f5f9' }}
+                                >
+                                  {isItemIncluded ? <CheckSquare size={17} color="var(--color-ok)" /> : <Square size={17} color="var(--color-text-muted)" />}
+                                  <span style={{ fontSize: 13, color: isItemIncluded ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{item.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { folderDB, equipmentDB, checklistDB, resultDB } from '../utils/db';
-import { calcProgress } from '../utils/helpers';
+import { calcProgress, formatDateTime } from '../utils/helpers';
 import { AlertTriangle, CheckCircle, Clock, Server, Folder } from 'lucide-react';
 
 export default function Dashboard() {
@@ -10,6 +10,7 @@ export default function Dashboard() {
   const [equipments, setEquipments] = useState([]);
   const [stats, setStats] = useState({ total: 0, done: 0, ng: 0, pending: 0, folderCount: 0 });
   const [equipmentStats, setEquipmentStats] = useState([]);
+  const [ngItems, setNgItems] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export default function Dashboard() {
     let doneEq = 0;
     let totalNg = 0;
     let totalPending = 0;
+    const collectedNgItems = [];
 
     const eqStats = eqs.map((eq) => {
       const cls = allCls.filter((c) => c.equipmentId === eq.id);
@@ -40,6 +42,11 @@ export default function Dashboard() {
       const cl = cls[cls.length - 1];
       const rs = allRs.filter((r) => r.checklistId === cl.id);
       const prog = calcProgress(cl, rs);
+      for (const result of rs.filter((item) => item.status === 'ng')) {
+        const category = (cl.categories || []).find((item) => (item.items || []).some((entry) => String(entry.id) === String(result.itemId)));
+        const item = category?.items?.find((entry) => String(entry.id) === String(result.itemId));
+        if (item) collectedNgItems.push({ eq, parentFolder, cl, categoryName: category.name, item, result });
+      }
       if (prog.pct === 100) doneEq++;
       totalNg += prog.ng;
       totalPending += prog.pending;
@@ -47,6 +54,7 @@ export default function Dashboard() {
     });
 
     setEquipmentStats(eqStats);
+    setNgItems(collectedNgItems);
     setStats({
       total: eqs.length,
       done: doneEq,
@@ -83,6 +91,43 @@ export default function Dashboard() {
       </div>
 
       {/* 설비별 현황 */}
+      <div className="card" style={{ marginBottom: 20, borderColor: stats.ng > 0 ? '#fecaca' : undefined }}>
+        <div className="card-header">
+          <span className="card-title" style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+            <AlertTriangle size={18} color="var(--color-ng)" /> 전체 설비 이상 항목
+            <span className="badge badge-ng">{ngItems.length}</span>
+          </span>
+        </div>
+
+        {ngItems.length === 0 ? (
+          <div style={{ padding: '8px 0', color: 'var(--color-text-muted)', fontSize: 14 }}>현재 기록된 이상 항목이 없습니다.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {ngItems.map(({ eq, parentFolder, cl, categoryName, item, result }) => (
+              <button
+                key={`${cl.id}-${item.id}`}
+                className="btn btn-secondary"
+                style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'flex-start', gap: 10, textAlign: 'left', padding: '12px 14px', borderColor: '#fecaca' }}
+                onClick={() => navigate(`/equipments/${eq.id}/checklist/${cl.id}`)}
+              >
+                <AlertTriangle size={18} color="var(--color-ng)" style={{ flexShrink: 0, marginTop: 1 }} />
+                <span style={{ flex: 1 }}>
+                  <strong style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span title={eq.turnOnDate ? `TURN ON ${eq.turnOnDate}` : 'TURN ON 미설정'} style={{ width: 9, height: 9, borderRadius: '50%', background: eq.turnOnDate ? 'var(--color-ok)' : 'var(--color-ng)' }} />{eq.name}</strong>
+                  {parentFolder && <span style={{ color: 'var(--color-text-muted)' }}> · {parentFolder.name}</span>}
+                  <span style={{ display: 'block', marginTop: 3, fontSize: 14 }}>{categoryName} · {item.name}</span>
+                  {(result.note || result.inspector || result.updatedAt) && (
+                    <span style={{ display: 'block', marginTop: 4, color: 'var(--color-text-muted)', fontSize: 12 }}>
+                      {[result.note, result.inspector, result.updatedAt && formatDateTime(result.updatedAt)].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--color-primary)', whiteSpace: 'nowrap' }}>체크하기 →</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="card">
         <div className="card-header">
           <span className="card-title">설비별 점검 현황</span>
@@ -130,7 +175,7 @@ export default function Dashboard() {
                         <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>- (단독 설비)</span>
                       )}
                     </td>
-                    <td style={{ fontWeight: 600 }}>{eq.name}</td>
+                    <td style={{ fontWeight: 600 }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span title={eq.turnOnDate ? `TURN ON ${eq.turnOnDate}` : 'TURN ON 미설정'} style={{ width: 9, height: 9, borderRadius: '50%', background: eq.turnOnDate ? 'var(--color-ok)' : 'var(--color-ng)' }} />{eq.name}</span></td>
                     <td>{[eq.unit && `${eq.unit}호기`, eq.line].filter(Boolean).join(' · ') || '-'}</td>
                     <td style={{ minWidth: 140 }}>
                       {hasChecklist ? (

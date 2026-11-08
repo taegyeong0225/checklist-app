@@ -164,7 +164,7 @@ export function exportChecklistToExcel(equipment, checklist, results) {
     ['호기', equipment.unit ? `${equipment.unit}호기` : '', '', '라인', equipment.line || ''],
     ['위치', equipment.location || '', '', '점검일', new Date().toLocaleDateString('ko-KR')],
     [],
-    ['구분 (카테고리)', '순서', '체크 항목', '확인 기준 / 비고', '점검 상태', '측정값', '작업자 비고', '확인자', '확인 시각'],
+    ['구분 (카테고리)', '순서', '체크 항목', '확인 기준 / 비고', '점검 상태', '측정값', '작업자 비고', '확인 시각'],
   ];
 
   const dataRows = [];
@@ -179,7 +179,6 @@ export function exportChecklistToExcel(equipment, checklist, results) {
         statusLabel(result.status),
         result.value || '',
         result.note || '',
-        result.inspector || '',
         result.updatedAt ? new Date(result.updatedAt).toLocaleString('ko-KR') : '',
       ]);
     });
@@ -189,11 +188,49 @@ export function exportChecklistToExcel(equipment, checklist, results) {
 
   ws['!cols'] = [
     { wch: 18 }, { wch: 8 }, { wch: 34 }, { wch: 30 },
-    { wch: 10 }, { wch: 12 }, { wch: 24 }, { wch: 12 }, { wch: 20 },
+    { wch: 10 }, { wch: 12 }, { wch: 24 }, { wch: 20 },
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, '점검결과');
   XLSX.writeFile(wb, `${equipment.name}_점검결과_${formatDate(new Date())}.xlsx`);
+}
+
+/**
+ * 사이트에서 편집한 마스터 템플릿을 다시 가져올 수 있는 엑셀 형식으로 내보낸다.
+ */
+export function exportTemplateToExcel(template) {
+  const wb = XLSX.utils.book_new();
+  const rows = [[
+    '구분', '순서', '체크 항목', '확인사항', '비고', '필수',
+    'item_id', 'category_id', 'sort_order', 'source_row', 'active',
+  ]];
+
+  for (const category of template.categories || []) {
+    (category.items || []).forEach((item, index) => {
+      rows.push([
+        category.name,
+        item.order || index + 1,
+        item.name || '',
+        item.criteria || '',
+        item.note || '',
+        'Y',
+        item.id || '',
+        category.categoryId || category.name,
+        item.order || index + 1,
+        '',
+        'Y',
+      ]);
+    });
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 22 }, { wch: 8 }, { wch: 42 }, { wch: 34 }, { wch: 22 }, { wch: 8 },
+    { wch: 20 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'MMI 셋업 리스트');
+  const safeName = (template.name || 'MMI_셋업_리스트').replace(/[\\/:*?"<>|]/g, '_');
+  XLSX.writeFile(wb, `${safeName}_${formatDate(new Date())}.xlsx`);
 }
 
 function statusLabel(status) {

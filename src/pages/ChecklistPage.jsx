@@ -17,10 +17,10 @@ const STATUS_OPTIONS = [
   { value: 'pending', label: '미점검',  cls: 'pending' },
 ];
 
-export default function ChecklistPage() {
+export default function ChecklistPage({ embedded = false, equipmentId: embeddedEquipmentId, checklistId: embeddedChecklistId }) {
   const { equipmentId, checklistId } = useParams();
-  const eqId = equipmentId;
-  const clId = checklistId;
+  const eqId = embeddedEquipmentId || equipmentId;
+  const clId = embeddedChecklistId || checklistId;
   const navigate = useNavigate();
   const addToast = useToast();
 
@@ -30,7 +30,6 @@ export default function ChecklistPage() {
   const [photos, setPhotos] = useState({});
   const [collapsed, setCollapsed] = useState({});
   const [filterMode, setFilterMode] = useState('all');
-  const [inspector, setInspector] = useState(() => localStorage.getItem('inspector') || '');
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const saveTimer = useRef(null);
@@ -102,17 +101,16 @@ export default function ChecklistPage() {
   async function handleStatus(itemId, status) {
     const updated = await resultDB.upsert(clId, itemId, {
       status,
-      inspector,
       value: getResult(itemId).value || '',
       note: getResult(itemId).note || '',
     });
     setResults((prev) => {
       const idx = prev.findIndex((r) => String(r.itemId) === String(itemId));
-      const record = { itemId, checklistId: clId, status, inspector, updatedAt: new Date().toISOString(), ...getResult(itemId) };
+      const record = { itemId, checklistId: clId, status, updatedAt: new Date().toISOString(), ...getResult(itemId) };
       if (typeof updated === 'number') record.id = updated;
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = { ...next[idx], status, inspector };
+        next[idx] = { ...next[idx], status };
         return next;
       }
       return [...prev, record];
@@ -122,7 +120,7 @@ export default function ChecklistPage() {
 
   async function handleField(itemId, field, value) {
     const r = getResult(itemId);
-    const data = { status: r.status || 'pending', inspector, ...r, [field]: value };
+    const data = { status: r.status || 'pending', ...r, [field]: value };
     await resultDB.upsert(clId, itemId, data);
     setResults((prev) => {
       const idx = prev.findIndex((r) => String(r.itemId) === String(itemId));
@@ -145,17 +143,12 @@ export default function ChecklistPage() {
     }, 800);
   }
 
-  function handleInspectorChange(v) {
-    setInspector(v);
-    localStorage.setItem('inspector', v);
-  }
-
   async function handlePhoto(itemId, file) {
     if (!file) return;
     const r = getResult(itemId);
     let resultId = r.id;
     if (!resultId) {
-      resultId = await resultDB.upsert(clId, itemId, { status: r.status || 'pending', inspector });
+      resultId = await resultDB.upsert(clId, itemId, { status: r.status || 'pending' });
       const rs = await resultDB.getByChecklistId(clId);
       setResults(rs);
     }
@@ -177,6 +170,23 @@ export default function ChecklistPage() {
       ...prev,
       [resultId]: (prev[resultId] || []).filter((p) => p.id !== photoId),
     }));
+  }
+
+  async function handleDeleteItem(item) {
+    const result = getResult(item.id);
+    if (result.id) await resultDB.delete(result.id);
+
+    const updatedChecklist = {
+      ...checklist,
+      excludedItemIds: [...new Set([...(checklist.excludedItemIds || []), String(item.id)])],
+      categories: (checklist.categories || [])
+        .map((category) => ({ ...category, items: category.items.filter((entry) => String(entry.id) !== String(item.id)) }))
+        .filter((category) => category.items.length > 0),
+    };
+    await checklistDB.put(updatedChecklist);
+    setChecklist(updatedChecklist);
+    setResults((previous) => previous.filter((entry) => String(entry.itemId) !== String(item.id)));
+    addToast('이 체크리스트에서 항목을 삭제했습니다.', 'success');
   }
 
   function toggleCollapse(catName) {
@@ -201,7 +211,7 @@ export default function ChecklistPage() {
     <div>
       {/* Back + Actions */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-        <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/equipments/${eqId}`)}>
+        <button className="btn btn-secondary btn-sm" style={{ display: embedded ? 'none' : undefined }} onClick={() => navigate(`/equipments/${eqId}`)}>
           <ArrowLeft size={15} /> 뒤로
         </button>
         <div style={{ flex: 1 }} />
@@ -213,6 +223,8 @@ export default function ChecklistPage() {
         </button>
       </div>
 
+      {!embedded && (
+      <>
       {/* Header card */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
@@ -249,18 +261,9 @@ export default function ChecklistPage() {
           ) : null}
         </div>
 
-        {/* Inspector */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
-          <label style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>확인자</label>
-          <input
-            className="form-input"
-            style={{ maxWidth: 200 }}
-            value={inspector}
-            onChange={(e) => handleInspectorChange(e.target.value)}
-            placeholder="이름 입력"
-          />
-        </div>
       </div>
+      </>
+      )}
 
       {/* Filter */}
       <div className="filter-bar" style={{ marginBottom: 16 }}>
@@ -317,6 +320,7 @@ export default function ChecklistPage() {
                     onField={(f, v) => handleField(item.id, f, v)}
                     onPhoto={(file) => handlePhoto(item.id, file)}
                     onDeletePhoto={(photoId) => handleDeletePhoto(result.id, photoId)}
+                    onDelete={() => handleDeleteItem(item)}
                   />
                 ))}
               </div>
@@ -328,7 +332,7 @@ export default function ChecklistPage() {
   );
 }
 
-function CheckItem({ item, result, photos, onStatus, onField, onPhoto, onDeletePhoto }) {
+function CheckItem({ item, result, photos, onStatus, onField, onPhoto, onDeletePhoto, onDelete }) {
   const [showNote, setShowNote] = useState(!!(result.note || result.value));
   const fileRef = useRef(null);
 
@@ -346,11 +350,16 @@ function CheckItem({ item, result, photos, onStatus, onField, onPhoto, onDeleteP
         <div className="checklist-item-name" style={{ margin: 0 }}>
           {item.name}
         </div>
-        {item.isNewlyAdded && (
-          <span className="badge badge-pending" style={{ fontSize: 11 }}>
-            <Sparkles size={11} style={{ marginRight: 3 }} />신규 추가 항목
-          </span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {item.isNewlyAdded && (
+            <span className="badge badge-pending" style={{ fontSize: 11 }}>
+              <Sparkles size={11} style={{ marginRight: 3 }} />신규 추가 항목
+            </span>
+          )}
+          <button className="btn-icon" onClick={onDelete} title="이 체크리스트에서 항목 삭제" style={{ color: 'var(--color-ng)' }}>
+            <Trash2 size={15} />
+          </button>
+        </div>
       </div>
 
       {item.criteria && (
@@ -451,7 +460,6 @@ function CheckItem({ item, result, photos, onStatus, onField, onPhoto, onDeleteP
           {result.updatedAt && (
             <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
               마지막 수정: {formatDateTime(result.updatedAt)}
-              {result.inspector && ` · ${result.inspector}`}
             </div>
           )}
         </div>

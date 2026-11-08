@@ -1,10 +1,10 @@
 // 템플릿 관리 페이지 (설비 자동 일괄 동기화 지원)
 import { useEffect, useState } from 'react';
 import { templateDB, checklistDB, equipmentDB } from '../utils/db';
-import { parseTemplateFile } from '../utils/excel';
+import { parseTemplateFile, exportTemplateToExcel } from '../utils/excel';
 import { syncChecklistWithTemplate, formatDateTime } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
-import { Plus, Upload, Pencil, Trash2, ChevronDown, ChevronRight, ClipboardList, RefreshCw, FileText } from 'lucide-react';
+import { Plus, Upload, Pencil, Trash2, ChevronDown, ChevronRight, ClipboardList, RefreshCw, FileText, Download } from 'lucide-react';
 
 const EMPTY_ITEM = { name: '', criteria: '', inputType: 'status', order: 0 };
 
@@ -125,6 +125,12 @@ export default function TemplateManager() {
 
     load();
     setSelected(updated);
+  }
+
+  function handleExportTemplate() {
+    if (!selected) return;
+    exportTemplateToExcel(selected);
+    addToast('현재 템플릿을 엑셀 파일로 내보냈습니다.', 'success');
   }
 
   // 수동 전체 동기화 버튼
@@ -286,6 +292,9 @@ export default function TemplateManager() {
                 </button>
                 <button className="btn btn-secondary btn-sm" onClick={() => setShowNewCatModal(true)}>
                   <Plus size={13} /> 카테고리 추가
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={handleExportTemplate}>
+                  <Download size={13} /> 엑셀 내보내기
                 </button>
                 <button className="btn btn-primary btn-sm" onClick={handleSaveTemplate}>
                   저장 & 설비 반영

@@ -27,7 +27,7 @@ export default function App() {
   return (
     <AuthGate>
       <RealtimeRefresh>
-        <BrowserRouter>
+        <BrowserRouter basename={import.meta.env.BASE_URL}>
           <ToastProvider>
             <Layout>
               <Routes>
