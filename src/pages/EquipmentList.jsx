@@ -6,7 +6,7 @@ import { calcProgress } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
 import {
   Folder, FolderPlus, Plus, Pencil, Trash2, ChevronRight,
-  Server, ArrowLeft, CheckSquare, Square, ChevronDown, ChevronUp, Layers, Sparkles
+  Server, ArrowLeft, CheckSquare, Square, ChevronDown, ChevronUp, Layers, Sparkles, Copy
 } from 'lucide-react';
 
 const EMPTY_FOLDER = { name: '', model: '', unit: '', line: '', location: '', memo: '' };
@@ -50,6 +50,7 @@ export default function EquipmentList() {
   // 폴더 모달 상태
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [editFolderItem, setEditFolderItem] = useState(null);
+  const [copySourceFolder, setCopySourceFolder] = useState(null);
   const [folderForm, setFolderForm] = useState(EMPTY_FOLDER);
 
   // 설비 모달 상태
@@ -123,14 +124,39 @@ export default function EquipmentList() {
   // ───── 폴더(메인 설비 그룹) 모달 처리 ─────
   function openAddFolder() {
     setEditFolderItem(null);
+    setCopySourceFolder(null);
     setFolderForm(EMPTY_FOLDER);
     setShowFolderModal(true);
   }
 
   function openEditFolder(fd) {
     setEditFolderItem(fd);
+    setCopySourceFolder(null);
     setFolderForm({ ...fd });
     setShowFolderModal(true);
+  }
+
+  function openCopyFolder(fd) {
+    setEditFolderItem(null);
+    setCopySourceFolder(fd);
+    setFolderForm({ ...fd, name: `${fd.name} 복사본` });
+    setShowFolderModal(true);
+  }
+
+  async function copyFolderContents(sourceFolderId, targetFolderId) {
+    const sourceChecklists = await checklistDB.getAll();
+    const sourceEquipments = equipments.filter((equipment) => equipment.folderId === sourceFolderId);
+
+    for (const sourceEquipment of sourceEquipments) {
+      const { id, createdAt, folderId, ...equipmentData } = sourceEquipment;
+      const targetEquipmentId = await equipmentDB.add({ ...equipmentData, folderId: targetFolderId });
+      const equipmentChecklists = sourceChecklists.filter((checklist) => checklist.equipmentId === id);
+
+      for (const sourceChecklist of equipmentChecklists) {
+        const { id: checklistId, createdAt: checklistCreatedAt, equipmentId, ...checklistData } = sourceChecklist;
+        await checklistDB.add({ ...checklistData, equipmentId: targetEquipmentId });
+      }
+    }
   }
 
   async function handleSaveFolder() {
@@ -140,13 +166,16 @@ export default function EquipmentList() {
         await folderDB.put({ ...editFolderItem, ...folderForm });
         addToast('폴더 정보를 수정했습니다.', 'success');
       } else {
-        await folderDB.add({ ...folderForm });
-        addToast('메인 설비 폴더를 생성했습니다.', 'success');
+        const folderId = await folderDB.add({ ...folderForm });
+        if (copySourceFolder) await copyFolderContents(copySourceFolder.id, folderId);
+        addToast(copySourceFolder ? '폴더와 하위 설비를 복사했습니다. 점검 결과는 포함하지 않았습니다.' : '메인 설비 폴더를 생성했습니다.', 'success');
       }
+      await load();
       setShowFolderModal(false);
-      load();
-    } catch {
-      addToast('저장 중 오류가 발생했습니다.', 'error');
+      setCopySourceFolder(null);
+    } catch (error) {
+      console.error(error);
+      addToast(`저장 실패: ${error.message}`, 'error');
     }
   }
 
@@ -159,7 +188,7 @@ export default function EquipmentList() {
   }
 
   // ───── 단위 설비 모달 처리 ─────
-  const activeTemplate = templates.find((t) => t.id === Number(eqForm.templateId)) || templates[0];
+  const activeTemplate = templates.find((t) => t.id === eqForm.templateId) || templates[0];
 
   function openAddEquipment(presetFolderId = currentFolderId) {
     setEditEqItem(null);
@@ -187,7 +216,7 @@ export default function EquipmentList() {
 
   function openEditEquipment(eq) {
     setEditEqItem(eq);
-    const defTpl = templates.find((t) => t.id === Number(eq.templateId)) || templates[0];
+    const defTpl = templates.find((t) => t.id === eq.templateId) || templates[0];
     let incCats = eq.includedCategories;
     let incIds = eq.includedItemIds;
 
@@ -219,10 +248,11 @@ export default function EquipmentList() {
         await equipmentDB.add({ ...eqForm });
         addToast('설비를 추가했습니다.', 'success');
       }
+      await load();
       setShowEqModal(false);
-      load();
-    } catch {
-      addToast('저장 중 오류가 발생했습니다.', 'error');
+    } catch (error) {
+      console.error(error);
+      addToast(`저장 실패: ${error.message || '권한을 확인하세요.'}`, 'error');
     }
   }
 
@@ -490,6 +520,13 @@ export default function EquipmentList() {
                         </button>
                         <button
                           className="btn-icon"
+                          onClick={(e) => { e.stopPropagation(); openCopyFolder(fd); }}
+                          title="폴더와 하위 설비 복사"
+                        >
+                          <Copy size={14} />
+                        </button>
+                        <button
+                          className="btn-icon"
                           onClick={(e) => { e.stopPropagation(); handleDeleteFolder(fd); }}
                           title="폴더 삭제"
                           style={{ color: 'var(--color-ng)' }}
@@ -715,7 +752,7 @@ export default function EquipmentList() {
               <select
                 className="form-select"
                 value={eqForm.folderId || ''}
-                onChange={(e) => setEqForm({ ...eqForm, folderId: e.target.value ? Number(e.target.value) : null })}
+                onChange={(e) => setEqForm({ ...eqForm, folderId: e.target.value || null })}
               >
                 <option value="">- 단독 설비 (폴더 없음) -</option>
                 {folders.map((f) => (

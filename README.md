@@ -1,16 +1,186 @@
-# React + Vite
+# 설비 통신 확인 체크리스트
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+`MMI 셋업 리스트.xlsx`를 기준 템플릿으로 사용해 설비별 통신 점검 체크리스트를 작성하는 반응형 웹앱입니다.
 
-Currently, two official plugins are available:
+휴대폰, iPad, PC에서 화면 너비에 맞게 사용할 수 있으며, 점검 데이터는 Supabase PostgreSQL에 저장됩니다. 같은 이메일로 로그인한 휴대폰과 iPad는 같은 데이터를 공유합니다.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 주요 기능
 
-## React Compiler
+- MMI 셋업 리스트 Excel/CSV 파일을 체크리스트 템플릿으로 가져오기
+- 템플릿의 카테고리·점검 항목·확인 기준·입력 형식 편집
+- 설비 그룹과 설비 등록, 설비별 체크리스트 생성
+- 기준 체크리스트를 다른 설비에 복사하고 모든 결과를 미점검으로 초기화
+- 항목별 `정상` / `이상` / `해당없음` / `미점검` 상태 기록
+- 측정값, 비고, 확인자, 현장 사진 첨부
+- 카테고리·설비별 진행률과 이상 항목 확인
+- 설비별 점검 결과를 Excel로 내보내기
+- 템플릿·설비·점검 결과·사진을 포함한 전체 백업/복원
+- 기존 점검 결과를 유지하면서 템플릿의 신규 항목 적용
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 데이터 보관과 동기화
 
-## Expanding the Oxlint configuration
+- 모든 템플릿, 설비, 점검 결과는 Supabase PostgreSQL에 저장됩니다.
+- 휴대폰과 iPad에서 **같은 아이디와 비밀번호**로 로그인하면 같은 데이터를 확인할 수 있습니다.
+- 다른 기기에서 변경한 내용은 새로고침으로 반영되며, 앱을 보고 있는 중에는 변경 감지 후 자동으로 화면을 새로 불러옵니다.
+- 사진은 현재 운영 범위에서 사용하지 않습니다.
+- 점검 완료 후에도 설비별 Excel 내보내기와 전체 백업으로 별도 보관하는 것을 권장합니다.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## Supabase 최초 설정
+
+1. Supabase 대시보드에서 프로젝트를 만듭니다.
+2. **SQL Editor**에서 [supabase/schema.sql](./supabase/schema.sql) 파일 전체를 실행합니다.
+3. **Authentication → Providers → Email**이 활성화되어 있는지 확인하고, `Confirm Email`은 끕니다. 앱이 내부적으로 아이디를 전용 이메일 형식으로 변환하므로 실제 이메일 인증은 사용하지 않습니다.
+4. 배포 주소가 있다면 **Authentication → URL Configuration**의 Site URL에 등록합니다.
+5. `.env.local`에 다음 값을 설정합니다. `.env.example`을 복사해 사용할 수 있습니다.
+
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+```
+
+`service_role` key와 DB 비밀번호는 브라우저 코드나 `.env.local`에 넣지 않습니다.
+
+이미 `schema.sql`을 실행한 프로젝트에서 저장 권한 오류가 나면 [supabase/fix-authenticated-grants.sql](./supabase/fix-authenticated-grants.sql)을 SQL Editor에서 한 번 실행합니다.
+
+## 시작하기
+
+### 필요 사항
+
+- 최신 LTS 버전의 Node.js
+- npm
+
+### 설치
+
+```bash
+cd checklist-app
+npm install
+```
+
+### 개발 서버 실행
+
+```bash
+npm run dev
+```
+
+명령 실행 뒤 터미널에 표시되는 주소를 브라우저에서 엽니다. 일반적으로 `http://localhost:5173`입니다.
+
+### 배포용 빌드
+
+```bash
+npm run build
+```
+
+완성된 정적 파일은 `dist` 폴더에 생성됩니다.
+
+### 빌드 결과 미리보기
+
+```bash
+npm run preview
+```
+
+### 코드 검사
+
+```bash
+npm run lint
+```
+
+## 현장 사용 순서
+
+1. **템플릿 관리**에서 `MMI 셋업 리스트.xlsx`를 가져옵니다.
+2. 가져온 항목과 카테고리, 확인 기준을 검토·수정합니다.
+3. **설비 목록**에서 설비 그룹과 설비를 등록합니다.
+4. 설비에 적용할 템플릿을 선택하여 체크리스트를 생성합니다.
+5. 점검 화면에서 상태, 측정값, 비고, 확인자, 사진을 입력합니다.
+6. 이상/미점검 필터로 누락된 항목을 확인합니다.
+7. 점검 완료 후 설비별 결과를 Excel로 내보냅니다.
+8. 작업 종료 시 전체 데이터를 백업 파일로 내보냅니다.
+
+### 기준 체크리스트 복사
+
+여러 설비에 같은 항목을 적용할 때는 기준 설비의 체크리스트를 사용합니다.
+
+1. 기준 설비에서 체크리스트를 하나 생성합니다.
+2. 체크리스트 목록의 **복사**를 누릅니다.
+3. 대상 설비를 선택하고 **미점검으로 복사**를 누릅니다.
+
+카테고리, 점검 항목, 확인 기준만 복사됩니다. 점검 상태, 측정값, 비고, 확인자 정보는 복사되지 않으므로 새 체크리스트는 진행률 0%로 시작합니다.
+
+## 템플릿 관리 원칙
+
+`MMI 셋업 리스트.xlsx`는 공통 마스터 템플릿입니다. 컨트롤러가 추가되면 원본 Excel에 카테고리와 점검 항목을 추가한 뒤, 앱에서 새 템플릿으로 가져옵니다.
+
+- 새 설비에는 최신 템플릿을 적용합니다.
+- 이미 점검 중이거나 완료된 체크리스트는 자동으로 변경하지 않습니다.
+- 기존 설비에 새 컨트롤러 항목이 필요하면 신규 항목만 적용합니다.
+- 기존에 입력한 정상/이상 상태, 비고, 측정값, 사진은 유지합니다.
+
+## Excel 템플릿 형식
+
+다음 헤더 형식을 사용하면 항목을 가장 정확히 읽을 수 있습니다.
+
+| 구분 | 순서 | 체크 항목 | 비고 | 이상사항 |
+|---|---:|---|---|---|
+| PLC | 1 | PLC 통신 상태 확인 | 온라인 상태 확인 | |
+| 네트워크 | 1 | IP Ping 확인 | 대상 장비 응답 확인 | |
+
+- `구분`과 `체크 항목`은 필수입니다.
+- `순서`, `비고`, `이상사항`, `item_id`, `category_id` 열은 선택입니다.
+- Excel의 첫 번째 시트를 읽습니다.
+- 기존 MMI 셋업 리스트처럼 카테고리와 항목이 혼합된 단순 형식도 가능한 범위에서 읽습니다. 가져온 뒤 템플릿 관리 화면에서 반드시 검토하세요.
+
+## 데이터 백업과 복원
+
+### 전체 백업
+
+상단 메뉴의 백업 기능은 다음 데이터를 하나의 파일로 내보냅니다.
+
+- 템플릿
+- 설비 그룹 및 설비 정보
+- 체크리스트와 점검 결과
+- 첨부 사진
+
+백업 파일은 데이터 보관과 복원 용도로 사용할 수 있습니다. Supabase를 사용하는 현재 버전에서는 동일한 계정의 온라인 데이터가 기준입니다.
+
+### 주의 사항
+
+- 복원 전에는 현재 기기의 데이터를 먼저 백업하세요.
+- 사진이 많으면 백업 파일 크기가 커질 수 있습니다.
+- 여러 기기에서 같은 설비를 각각 점검한 경우, 자동 병합되지 않습니다. 백업 파일을 덮어쓰기 전에 원본을 보관하세요.
+
+## 기술 구성
+
+| 영역 | 구성 |
+|---|---|
+| UI | React 19, Vite |
+| 화면 이동 | React Router |
+| 아이콘 | Lucide React |
+| 데이터베이스 | Supabase PostgreSQL |
+| 실시간 반영 | Supabase Realtime |
+| Excel 처리 | SheetJS (`xlsx`) |
+| 배포 형태 | 정적 웹앱 |
+
+## 프로젝트 구조
+
+```text
+checklist-app/
+├─ src/
+│  ├─ pages/          # 대시보드, 설비, 체크리스트, 템플릿 화면
+│  ├─ components/     # 레이아웃, 알림 UI
+│  ├─ utils/
+│  │  ├─ db.js        # Supabase 저장·백업·복원
+│  │  ├─ excel.js     # Excel 템플릿 읽기·결과 내보내기
+│  │  └─ helpers.js   # 진행률·템플릿 항목 병합 도우미
+│  ├─ App.jsx         # 라우팅
+│  └─ index.css       # 공통 스타일
+├─ public/            # 정적 아이콘·리다이렉트 설정
+├─ supabase/schema.sql # 테이블·RLS·Realtime 설정 SQL
+├─ .env.example       # Supabase 환경변수 예시
+├─ package.json
+└─ vite.config.js
+```
+
+## 제한 사항
+
+- 같은 이메일 계정으로 로그인한 기기가 하나의 데이터 공간을 공유합니다.
+- 다른 사용자와의 공유, 조직별 권한, 공동 편집 충돌 해결은 아직 제공하지 않습니다.
+- Supabase 무료 플랜의 용량·전송량·휴면 정책이 적용됩니다.

@@ -19,8 +19,8 @@ const STATUS_OPTIONS = [
 
 export default function ChecklistPage() {
   const { equipmentId, checklistId } = useParams();
-  const eqId = Number(equipmentId);
-  const clId = Number(checklistId);
+  const eqId = equipmentId;
+  const clId = checklistId;
   const navigate = useNavigate();
   const addToast = useToast();
 
