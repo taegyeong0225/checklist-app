@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { equipmentDB, checklistDB, resultDB, photoDB, templateDB } from '../utils/db';
-import { calcProgress, formatDateTime, syncChecklistWithTemplate } from '../utils/helpers';
+import { CHECKED_STATUSES, calcProgress, clearNewlyAddedFlags, formatDateTime, syncChecklistWithTemplate } from '../utils/helpers';
 import { exportChecklistToExcel } from '../utils/excel';
 import { useToast } from '../components/ToastProvider';
 import {
@@ -64,27 +64,48 @@ export default function ChecklistPage({ embedded = false, equipmentId: embeddedE
 
     // 사진 로드
     const photoMap = {};
-    for (const r of rs) {
-      const ps = await photoDB.getByResultId(r.id);
-      if (ps.length > 0) photoMap[r.id] = ps;
+    for (const p of await photoDB.getByResultIds(rs.map((r) => r.id))) {
+      (photoMap[p.resultId] ||= []).push(p);
     }
     setPhotos(photoMap);
 
     // 🌟 최신 마스터 템플릿과 자동 동기화 (행 삽입 등 신규 항목 반영)
     const masterTpl = tpls.find((t) => t.id === cl.templateId) || tpls[0];
+    let nextCl = cl;
+    let needsSave = false;
     if (masterTpl) {
       const resultIds = new Set(rs.map((r) => String(r.itemId)));
       const { updatedChecklist, addedCount, restoredCount, changed } = syncChecklistWithTemplate(cl, masterTpl, eq, resultIds);
       if (changed) {
-        await checklistDB.put(updatedChecklist);
-        setChecklist(updatedChecklist);
+        nextCl = updatedChecklist;
+        needsSave = true;
         if (restoredCount > 0) addToast(`🛟 점검 기록이 남아있던 항목 ${restoredCount}개를 복구했습니다.`, 'success', 5000);
         if (addedCount > 0) addToast(`✨ 템플릿 변경사항과 신규 항목 ${addedCount}개를 반영했습니다!`, 'success', 4500);
-      } else {
-        setChecklist(cl);
       }
-    } else {
-      setChecklist(cl);
+    }
+
+    // 이미 점검 상태가 입력된 항목은 '신규 추가' 표시 해제
+    const checkedIds = new Set(rs.filter((r) => CHECKED_STATUSES.includes(r.status)).map((r) => String(r.itemId)));
+    const cleared = clearNewlyAddedFlags(nextCl, checkedIds);
+    if (cleared !== nextCl) {
+      nextCl = cleared;
+      needsSave = true;
+    }
+
+    if (needsSave) await checklistDB.put(nextCl);
+    setChecklist(nextCl);
+  }
+
+  // 점검 상태를 처음 누르면 해당 항목의 '신규 추가' 표시 해제
+  async function clearNewFlagOnCheck(itemId, status) {
+    if (!CHECKED_STATUSES.includes(status) || !checklist) return;
+    const cleared = clearNewlyAddedFlags(checklist, new Set([String(itemId)]));
+    if (cleared === checklist) return;
+    setChecklist(cleared);
+    try {
+      await checklistDB.put(cleared);
+    } catch (error) {
+      console.error(error);
     }
   }
 
@@ -111,6 +132,7 @@ export default function ChecklistPage({ embedded = false, equipmentId: embeddedE
   const getResult = (itemId) => results.find((r) => String(r.itemId) === String(itemId)) || {};
 
   async function handleStatus(itemId, status) {
+    clearNewFlagOnCheck(itemId, status);
     const updated = await resultDB.upsert(clId, itemId, {
       status,
       value: getResult(itemId).value || '',

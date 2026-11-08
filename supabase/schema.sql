@@ -63,14 +63,25 @@ drop policy if exists "owner access" on public.checklists;
 drop policy if exists "owner access" on public.results;
 drop policy if exists "owner access" on public.photos;
 
-create policy "owner access" on public.templates for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
-create policy "owner access" on public.folders for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
-create policy "owner access" on public.equipments for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
-create policy "owner access" on public.checklists for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
-create policy "owner access" on public.results for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
-create policy "owner access" on public.photos for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+create policy "owner access" on public.templates for all using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+create policy "owner access" on public.folders for all using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+create policy "owner access" on public.equipments for all using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+create policy "owner access" on public.checklists for all using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+create policy "owner access" on public.results for all using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+create policy "owner access" on public.photos for all using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on table public.templates, public.folders, public.equipments, public.checklists, public.results, public.photos to authenticated;
 
 alter publication supabase_realtime add table public.templates, public.folders, public.equipments, public.checklists, public.results;
+
+create index if not exists equipments_folder_id_idx   on public.equipments (folder_id);
+create index if not exists checklists_equipment_id_idx on public.checklists (equipment_id);
+create index if not exists checklists_template_id_idx  on public.checklists (template_id);
+create index if not exists photos_result_id_idx        on public.photos (result_id);
+create index if not exists templates_owner_id_idx  on public.templates (owner_id);
+create index if not exists folders_owner_id_idx    on public.folders (owner_id);
+create index if not exists equipments_owner_id_idx on public.equipments (owner_id);
+create index if not exists checklists_owner_id_idx on public.checklists (owner_id);
+create index if not exists results_owner_id_idx    on public.results (owner_id);
+create index if not exists photos_owner_id_idx     on public.photos (owner_id);

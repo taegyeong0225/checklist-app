@@ -30,6 +30,13 @@ async function getAll(table, map = baseRecord, orderColumn = 'created_at') {
   return data.map(map);
 }
 
+// 전체를 받아 브라우저에서 거르지 않고, DB에서 조건으로 필터링 (인덱스 사용)
+async function getWhere(table, column, value, map = baseRecord, orderColumn = 'created_at') {
+  const { data, error } = await client().from(table).select('*').eq(column, value).order(orderColumn);
+  throwIfError(error);
+  return data.map(map);
+}
+
 async function getById(table, id, map = baseRecord) {
   const { data, error } = await client().from(table).select('*').eq('id', id).maybeSingle();
   throwIfError(error);
@@ -84,7 +91,7 @@ export const folderDB = {
 
 export const equipmentDB = {
   getAll: () => getAll('equipments', mapEquipment),
-  getByFolderId: async (folderId) => (await getAll('equipments', mapEquipment)).filter((item) => item.folderId === folderId),
+  getByFolderId: (folderId) => getWhere('equipments', 'folder_id', folderId, mapEquipment),
   getById: (id) => getById('equipments', id, mapEquipment),
   add: async (record) => (await insert('equipments', {
     folder_id: record.folderId || null,
@@ -105,7 +112,7 @@ export const equipmentDB = {
 
 export const checklistDB = {
   getAll: () => getAll('checklists', mapChecklist),
-  getByEquipmentId: async (equipmentId) => (await getAll('checklists', mapChecklist)).filter((item) => item.equipmentId === equipmentId),
+  getByEquipmentId: (equipmentId) => getWhere('checklists', 'equipment_id', equipmentId, mapChecklist),
   getById: (id) => getById('checklists', id, mapChecklist),
   add: async (record) => (await insert('checklists', {
     equipment_id: record.equipmentId,
@@ -122,7 +129,7 @@ export const checklistDB = {
 
 export const resultDB = {
   getAll: () => getAll('results', mapResult, 'updated_at'),
-  getByChecklistId: async (checklistId) => (await getAll('results', mapResult, 'updated_at')).filter((item) => item.checklistId === checklistId),
+  getByChecklistId: (checklistId) => getWhere('results', 'checklist_id', checklistId, mapResult, 'updated_at'),
   getById: (id) => getById('results', id, mapResult),
   upsert: async (checklistId, itemId, record) => {
     const { data, error } = await client().from('results').upsert({
@@ -139,7 +146,14 @@ export const resultDB = {
 };
 
 export const photoDB = {
-  getByResultId: async (resultId) => (await getAll('photos', mapPhoto)).filter((item) => item.resultId === resultId),
+  getByResultId: (resultId) => getWhere('photos', 'result_id', resultId, mapPhoto),
+  // 여러 점검 결과의 사진을 한 번의 요청으로 조회
+  getByResultIds: async (resultIds) => {
+    if (!resultIds.length) return [];
+    const { data, error } = await client().from('photos').select('*').in('result_id', resultIds).order('created_at');
+    throwIfError(error);
+    return data.map(mapPhoto);
+  },
   add: async (record) => (await insert('photos', { result_id: record.resultId, data: dataOnly(record, ['resultId']) }, mapPhoto)).id,
   delete: (id) => remove('photos', id),
 };

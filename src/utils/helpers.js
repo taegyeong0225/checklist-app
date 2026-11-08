@@ -65,6 +65,27 @@ export function defaultInclusion(template) {
   };
 }
 
+/** 점검 완료로 보는 상태 (pending 제외) */
+export const CHECKED_STATUSES = ['ok', 'ng', 'na'];
+
+/** itemIds에 해당하는 항목의 '신규 추가'(isNewlyAdded) 표시 제거. 바뀐 게 없으면 원본 그대로 반환 */
+export function clearNewlyAddedFlags(checklist, itemIds) {
+  let changed = false;
+  const categories = (checklist?.categories || []).map((cat) => {
+    let catChanged = false;
+    const items = (cat.items || []).map((item) => {
+      if (!item.isNewlyAdded || !itemIds.has(String(item.id))) return item;
+      catChanged = true;
+      const { isNewlyAdded: _removed, ...rest } = item;
+      return rest;
+    });
+    if (!catChanged) return cat;
+    changed = true;
+    return { ...cat, items };
+  });
+  return changed ? { ...checklist, categories } : checklist;
+}
+
 export function calcProgress(checklist, results) {
   let total = 0;
   let done = 0;

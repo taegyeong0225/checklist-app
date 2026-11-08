@@ -156,7 +156,6 @@ export default function Dashboard() {
                 <tr>
                   <th>메인 그룹 (폴더)</th>
                   <th>단위 설비명</th>
-                  <th>호기 / 라인</th>
                   <th>진행률</th>
                   <th>이상</th>
                   <th>상태</th>
@@ -176,7 +175,6 @@ export default function Dashboard() {
                       )}
                     </td>
                     <td style={{ fontWeight: 600 }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span title={eq.turnOnDate ? `TURN ON ${eq.turnOnDate}` : 'TURN ON 미설정'} style={{ width: 9, height: 9, borderRadius: '50%', background: eq.turnOnDate ? 'var(--color-ok)' : 'var(--color-ng)' }} />{eq.name}</span></td>
-                    <td>{[eq.unit && `${eq.unit}호기`, eq.line].filter(Boolean).join(' · ') || '-'}</td>
                     <td style={{ minWidth: 140 }}>
                       {hasChecklist ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

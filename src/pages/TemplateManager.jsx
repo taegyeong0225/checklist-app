@@ -4,7 +4,7 @@ import { templateDB, checklistDB, equipmentDB, resultDB } from '../utils/db';
 import { parseTemplateFile, exportTemplateToExcel } from '../utils/excel';
 import { syncChecklistWithTemplate, formatDateTime, preserveTemplateItemIds } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
-import { Plus, Upload, Pencil, Trash2, ChevronDown, ChevronRight, ClipboardList, RefreshCw, FileText, Download } from 'lucide-react';
+import { Plus, Upload, Pencil, Trash2, ChevronDown, ChevronRight, ClipboardList, FileText, Download } from 'lucide-react';
 
 const EMPTY_ITEM = { name: '', criteria: '', inputType: 'status', order: 0, required: true };
 
@@ -16,7 +16,6 @@ export default function TemplateManager() {
   const [newCatName, setNewCatName] = useState('');
   const [showItemModal, setShowItemModal] = useState(null);
   const [itemForm, setItemForm] = useState(EMPTY_ITEM);
-  const [syncingAll, setSyncingAll] = useState(false);
   const addToast = useToast();
 
   useEffect(() => { load(); }, []);
@@ -142,21 +141,6 @@ export default function TemplateManager() {
     addToast('현재 템플릿을 엑셀 파일로 내보냈습니다.', 'success');
   }
 
-  // 수동 전체 동기화 버튼
-  async function handleSyncAllManual() {
-    if (!selected) return;
-    setSyncingAll(true);
-    try {
-      const { totalUpdated, totalItemsAdded } = await syncAllChecklistsWithTemplate(selected);
-      if (totalUpdated > 0) {
-        addToast(`✨ 기존 ${totalUpdated}개 설비 시트에 템플릿 변경사항을 반영했습니다.${totalItemsAdded ? ` 신규 항목 ${totalItemsAdded}개 포함` : ''}`, 'success');
-      } else {
-        addToast('모든 설비가 이미 최신 템플릿과 일치합니다.', 'default');
-      }
-    } finally {
-      setSyncingAll(false);
-    }
-  }
 
   async function handleCreateBlank() {
     const name = prompt('새 템플릿 이름을 입력하세요:');
@@ -296,9 +280,6 @@ export default function TemplateManager() {
                 <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{selected.version}</div>
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <button className="btn btn-secondary btn-sm" onClick={handleSyncAllManual} disabled={syncingAll} title="기존 모든 설비에 변경사항 즉시 반영">
-                  <RefreshCw size={13} /> {syncingAll ? '동기화 중...' : '기존 설비에 전체 반영'}
-                </button>
                 <button className="btn btn-secondary btn-sm" onClick={() => setShowNewCatModal(true)}>
                   <Plus size={13} /> 카테고리 추가
                 </button>

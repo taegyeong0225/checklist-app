@@ -5,7 +5,7 @@ import { equipmentDB, checklistDB, resultDB, templateDB } from '../utils/db';
 import { calcProgress, defaultCategoryItemIds, defaultInclusion, formatDateTime, isRequiredItem } from '../utils/helpers';
 import { useToast } from '../components/ToastProvider';
 import ChecklistPage from './ChecklistPage';
-import { ArrowLeft, ClipboardList, Plus, ExternalLink, Pencil, CheckSquare, Square, Copy, ChevronDown, ChevronUp, Folder, Trash2 } from 'lucide-react';
+import { ArrowLeft, ClipboardList, Plus, ExternalLink, Pencil, CheckSquare, Square, Copy, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 
 export default function EquipmentDetail() {
   const { id } = useParams();
@@ -232,16 +232,13 @@ export default function EquipmentDetail() {
   return (
     <div>
       {/* Back */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <button className="btn btn-secondary btn-sm" onClick={() => navigate('/equipments')}>
-          <ArrowLeft size={15} /> 목록으로
-        </button>
-        {equipment.folderId && (
+      {equipment.folderId && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/equipments?folder=${equipment.folderId}`)}>
-            <Folder size={15} /> 폴더로 이동
+            <ArrowLeft size={15} /> 폴더로 이동
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Equipment Info */}
       <div className="card" style={{ marginBottom: 20 }}>
