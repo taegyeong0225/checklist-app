@@ -2,8 +2,8 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Server, ClipboardList, Settings, Download, Upload, Menu, X, Wrench
 } from 'lucide-react';
-import { useState } from 'react';
-import { exportAllData, importAllData } from '../utils/db';
+import { useEffect, useState } from 'react';
+import { equipmentDB, exportAllData, importAllData } from '../utils/db';
 import { useToast } from './ToastProvider';
 
 const NAV_ITEMS = [
@@ -109,7 +109,7 @@ export default function Layout({ children }) {
       {/* Main */}
       <div className="main-content">
         <header className="topbar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
             <button
               className="sidebar-toggle"
               onClick={() => setSidebarOpen((v) => !v)}
@@ -138,7 +138,36 @@ function PageTitle() {
     '/issues': '이슈 리스트',
   };
   const base = '/' + pathname.split('/')[1];
-  if (pathname.includes('/equipments/') && pathname.includes('/checklist')) return <span className="topbar-title">점검 화면</span>;
-  if (pathname.includes('/equipments/')) return <span className="topbar-title">설비 상세</span>;
+  if (pathname.includes('/equipments/')) {
+    return <EquipmentTitle label={pathname.includes('/checklist') ? '점검 화면' : '설비 상세'} equipmentId={pathname.split('/')[2]} />;
+  }
   return <span className="topbar-title">{map[base] || '설비 통신 점검'}</span>;
+}
+
+// 설비 상세·점검 화면 상단에 모델·호기를 함께 표시 (스크롤해도 상단에 고정)
+function EquipmentTitle({ label, equipmentId }) {
+  const [equipment, setEquipment] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => equipmentDB.getById(equipmentId)
+      .then((eq) => { if (!cancelled) setEquipment(eq || null); })
+      .catch(() => { if (!cancelled) setEquipment(null); });
+    setEquipment(null);
+    load();
+    window.addEventListener('equipment-updated', load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('equipment-updated', load);
+    };
+  }, [equipmentId]);
+
+  const info = [equipment?.model, equipment?.unit && `${equipment.unit}호기`, equipment?.name].filter(Boolean).join(' · ');
+
+  return (
+    <span className="topbar-title" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      {label}
+      {info && <span style={{ marginLeft: 8, fontWeight: 500, color: 'var(--color-text-muted)' }}>- {info}</span>}
+    </span>
+  );
 }

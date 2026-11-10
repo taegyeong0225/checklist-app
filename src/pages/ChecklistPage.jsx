@@ -7,7 +7,7 @@ import { exportChecklistToExcel } from '../utils/excel';
 import { useToast } from '../components/ToastProvider';
 import {
   ArrowLeft, Download, ChevronDown, ChevronRight,
-  Camera, Trash2, Filter, AlertTriangle, RefreshCw, Sparkles
+  Camera, Trash2, Filter, AlertTriangle, RefreshCw, Sparkles, CheckCircle
 } from 'lucide-react';
 
 const STATUS_OPTIONS = [
@@ -30,6 +30,10 @@ export default function ChecklistPage({ embedded = false, equipmentId: embeddedE
   const [photos, setPhotos] = useState({});
   const [collapsed, setCollapsed] = useState({});
   const [filterMode, setFilterMode] = useState('all');
+  // 필터를 고른 시점에 보이던 항목 ID. 점검 상태를 바꿔도 화면에서 바로 사라지지 않게 유지
+  const [filterSnapshot, setFilterSnapshot] = useState(new Set());
+  // 화면을 열 때 이미 완료돼 있던 카테고리. 점검 중에 완료돼도 바로 접히지 않게 진입 시점 기준으로만 접음
+  const [completedOnLoad, setCompletedOnLoad] = useState(new Set());
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const saveTimer = useRef(null);
@@ -94,6 +98,33 @@ export default function ChecklistPage({ embedded = false, equipmentId: embeddedE
 
     if (needsSave) await checklistDB.put(nextCl);
     setChecklist(nextCl);
+    setCollapsed({});
+    setFilterMode('all');
+    setFilterSnapshot(new Set());
+    const doneIds = new Set(rs.filter((r) => CHECKED_STATUSES.includes(r.status)).map((r) => String(r.itemId)));
+    setCompletedOnLoad(new Set(
+      (nextCl.categories || [])
+        .filter((cat) => (cat.items || []).length > 0 && cat.items.every((item) => doneIds.has(String(item.id))))
+        .map((cat) => cat.name),
+    ));
+  }
+
+  function matchesFilter(mode, result) {
+    if (mode === 'ng') return result.status === 'ng';
+    if (mode === 'pending') return !result.status || result.status === 'pending';
+    return true;
+  }
+
+  // 같은 필터를 다시 누르면 현재 상태 기준으로 목록을 새로 고침
+  function changeFilter(mode) {
+    setFilterMode(mode);
+    const ids = new Set();
+    for (const cat of checklist?.categories || []) {
+      for (const item of cat.items || []) {
+        if (matchesFilter(mode, getResult(item.id))) ids.add(String(item.id));
+      }
+    }
+    setFilterSnapshot(ids);
   }
 
   // 점검 상태를 처음 누르면 해당 항목의 '신규 추가' 표시 해제
@@ -246,8 +277,9 @@ export default function ChecklistPage({ embedded = false, equipmentId: embeddedE
     addToast('이 체크리스트에서 항목을 삭제했습니다.', 'success');
   }
 
-  function toggleCollapse(catName) {
-    setCollapsed((prev) => ({ ...prev, [catName]: !prev[catName] }));
+  // 직접 펼치거나 접은 카테고리는 그 상태를 유지 (자동 접힘보다 우선)
+  function toggleCollapse(catName, isOpen) {
+    setCollapsed((prev) => ({ ...prev, [catName]: isOpen }));
   }
 
   function handleExport() {
@@ -333,7 +365,7 @@ export default function ChecklistPage({ embedded = false, equipmentId: embeddedE
           <button
             key={v}
             className={`btn btn-sm ${filterMode === v ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setFilterMode(v)}
+            onClick={() => changeFilter(v)}
           >
             {label}
           </button>
@@ -343,23 +375,26 @@ export default function ChecklistPage({ embedded = false, equipmentId: embeddedE
       {/* Categories */}
       {(checklist.categories || []).map((cat) => {
         const catResults = (cat.items || []).map((item) => ({ item, result: getResult(item.id) }));
-        const filteredItems = catResults.filter(({ result }) => {
-          if (filterMode === 'ng') return result.status === 'ng';
-          if (filterMode === 'pending') return !result.status || result.status === 'pending';
-          return true;
-        });
+        const filteredItems = filterMode === 'all'
+          ? catResults
+          : catResults.filter(({ item }) => filterSnapshot.has(String(item.id)));
         if (filteredItems.length === 0) return null;
 
         const catDone = catResults.filter(({ result }) => ['ok','ng','na'].includes(result.status)).length;
         const catNg = catResults.filter(({ result }) => result.status === 'ng').length;
-        const isOpen = !collapsed[cat.name];
+        // 직접 접거나 펼친 적이 없으면, 전체 보기에서 화면 진입 시 이미 완료된 카테고리는 자동으로 접음
+        const isComplete = catResults.length > 0 && catDone === catResults.length;
+        const isOpen = collapsed[cat.name] === undefined
+          ? !(filterMode === 'all' && completedOnLoad.has(cat.name))
+          : !collapsed[cat.name];
 
         return (
           <div key={cat.name} className="category-section">
-            <div className="category-header" onClick={() => toggleCollapse(cat.name)}>
+            <div className="category-header" onClick={() => toggleCollapse(cat.name, isOpen)}>
               {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
               <span className="category-title">{cat.name}</span>
               <span className="category-badge">
+                {isComplete && <CheckCircle size={14} color="var(--color-ok)" style={{ marginRight: 4, verticalAlign: -2 }} />}
                 {catDone}/{catResults.length}
                 {catNg > 0 && <span className="badge badge-ng" style={{ marginLeft: 6 }}>이상 {catNg}</span>}
               </span>

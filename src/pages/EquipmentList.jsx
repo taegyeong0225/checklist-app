@@ -6,8 +6,14 @@ import { calcProgress, defaultCategoryItemIds, defaultInclusion } from '../utils
 import { useToast } from '../components/ToastProvider';
 import {
   Folder, FolderPlus, Plus, Pencil, Trash2, ChevronRight,
-  Server, ArrowLeft, CheckSquare, Square, ChevronDown, ChevronUp, Layers, Sparkles, Copy
+  Server, ArrowLeft, CheckSquare, Square, ChevronDown, ChevronUp, Layers, Sparkles, Copy, CheckCircle
 } from 'lucide-react';
+
+// 로컬 기준 오늘 날짜 (YYYY-MM-DD)
+function todayString() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 const FOLDER_INHERIT_FIELDS = ['model', 'unit', 'line', 'location'];
 const EMPTY_FOLDER ={ name: '', model: '', unit: '', line: '', location: '', deliveryDate: '', memo: '' };
@@ -49,6 +55,7 @@ export default function EquipmentList() {
   const [currentFolderId, setCurrentFolderId] = useState(() => new URLSearchParams(location.search).get('folder')); // null = 루트, 특정 폴더 안
   const [filter, setFilter] = useState('');
   const [lineFilter, setLineFilter] = useState('');
+  const [showCompletedFolders, setShowCompletedFolders] = useState(false);
 
   // 폴더 모달 상태
   const [showFolderModal, setShowFolderModal] = useState(false);
@@ -356,6 +363,87 @@ export default function EquipmentList() {
     return matchQ && matchL;
   });
 
+  // 납품일이 오늘보다 이전이면 '완료된 그룹'으로 분류
+  const today = todayString();
+  const isFolderCompleted = (fd) => Boolean(fd.deliveryDate) && fd.deliveryDate < today;
+  const activeFolders = filteredFolders.filter((fd) => !isFolderCompleted(fd));
+  const completedFolders = filteredFolders
+    .filter(isFolderCompleted)
+    .sort((a, b) => b.deliveryDate.localeCompare(a.deliveryDate));
+
+  // 검색·라인 필터 중에는 완료된 그룹도 펼쳐서 결과를 바로 보여줌
+  const completedOpen = showCompletedFolders || Boolean(filter || lineFilter);
+
+  function renderFolderCard(fd, completed) {
+    const prog = folderProgressMap[fd.id] || { pct: 0, count: 0, ng: 0 };
+    return (
+      <div
+        key={fd.id}
+        className="equipment-card"
+        style={{ borderLeft: `4px solid ${completed ? '#94a3b8' : '#f59e0b'}`, background: '#fff', opacity: completed ? 0.85 : 1 }}
+        onClick={() => setCurrentFolderId(fd.id)}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Folder size={22} color={completed ? '#94a3b8' : '#f59e0b'} fill={completed ? '#f1f5f9' : '#fef3c7'} />
+            <span style={{ fontSize: 16, fontWeight: 700 }}>{fd.name}</span>
+          </div>
+          <span className="badge badge-na" style={{ fontSize: 11 }}>
+            하위 {prog.count}대
+          </span>
+        </div>
+
+        <div className="equipment-card-meta">
+          {[fd.model, fd.unit && `${fd.unit}호기`, fd.line, fd.location, fd.deliveryDate && `납품일 ${fd.deliveryDate}`].filter(Boolean).join(' · ')}
+        </div>
+
+        {/* 폴더 종합 진행률 */}
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>
+            <span>종합 완료율</span>
+            <span>
+              {prog.pct}%
+              {prog.ng > 0 && <span style={{ color: 'var(--color-ng)', marginLeft: 4 }}>이상 {prog.ng}</span>}
+            </span>
+          </div>
+          <div className="progress-bar" style={{ height: 6 }}>
+            <div className="progress-bar-fill" style={{ width: `${prog.pct}%` }} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 8, borderTop: '1px solid #f1f5f9' }}>
+          <span style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 600 }}>
+            열기 →
+          </span>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button
+              className="btn-icon"
+              onClick={(e) => { e.stopPropagation(); openEditFolder(fd); }}
+              title="폴더 정보 수정"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              className="btn-icon"
+              onClick={(e) => { e.stopPropagation(); openCopyFolder(fd); }}
+              title="폴더와 하위 설비 복사"
+            >
+              <Copy size={14} />
+            </button>
+            <button
+              className="btn-icon"
+              onClick={(e) => { e.stopPropagation(); handleDeleteFolder(fd); }}
+              title="폴더 삭제"
+              style={{ color: 'var(--color-ng)' }}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // 현재 폴더 안의 설비들 또는 루트의 단독 설비들
   const visibleEquipments = equipments.filter((e) => {
     if (currentFolderId !== null) {
@@ -509,86 +597,42 @@ export default function EquipmentList() {
             <Folder size={18} color="#f59e0b" />
             <span>메인 설비 그룹 (폴더)</span>
             <span className="badge badge-na" style={{ fontSize: 11, marginLeft: 4 }}>
-              {filteredFolders.length}개
+              {activeFolders.length}개
             </span>
           </div>
 
-          {filteredFolders.length === 0 ? (
+          {activeFolders.length === 0 ? (
             <div style={{ padding: '24px 16px', background: '#fff', border: '1px dashed var(--color-border)', borderRadius: 8, textAlign: 'center', color: 'var(--color-text-muted)' }}>
-              생성된 메인 설비 폴더가 없습니다. <strong>[+ 폴더(메인 설비) 생성]</strong> 버튼을 눌러 그룹을 만드세요.
+              {completedFolders.length > 0
+                ? '진행 중인 그룹이 없습니다. 납품일이 지난 그룹은 아래 [완료된 그룹]에 있습니다.'
+                : <>생성된 메인 설비 폴더가 없습니다. <strong>[+ 폴더(메인 설비) 생성]</strong> 버튼을 눌러 그룹을 만드세요.</>}
               <br /><span style={{ fontSize: 12 }}>예: SFA GEN2 FCM 3호기, A라인 검사기 등</span>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 16 }}>
-              {filteredFolders.map((fd) => {
-                const prog = folderProgressMap[fd.id] || { pct: 0, count: 0, ng: 0 };
-                return (
-                  <div
-                    key={fd.id}
-                    className="equipment-card"
-                    style={{ borderLeft: '4px solid #f59e0b', background: '#fff' }}
-                    onClick={() => setCurrentFolderId(fd.id)}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Folder size={22} color="#f59e0b" fill="#fef3c7" />
-                        <span style={{ fontSize: 16, fontWeight: 700 }}>{fd.name}</span>
-                      </div>
-                      <span className="badge badge-na" style={{ fontSize: 11 }}>
-                        하위 {prog.count}대
-                      </span>
-                    </div>
+              {activeFolders.map((fd) => renderFolderCard(fd, false))}
+            </div>
+          )}
 
-                    <div className="equipment-card-meta">
-                      {[fd.model, fd.unit && `${fd.unit}호기`, fd.line, fd.location, fd.deliveryDate && `납품일 ${fd.deliveryDate}`].filter(Boolean).join(' · ')}
-                    </div>
-
-                    {/* 폴더 종합 진행률 */}
-                    <div style={{ marginTop: 10 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 4 }}>
-                        <span>종합 완료율</span>
-                        <span>
-                          {prog.pct}%
-                          {prog.ng > 0 && <span style={{ color: 'var(--color-ng)', marginLeft: 4 }}>이상 {prog.ng}</span>}
-                        </span>
-                      </div>
-                      <div className="progress-bar" style={{ height: 6 }}>
-                        <div className="progress-bar-fill" style={{ width: `${prog.pct}%` }} />
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 8, borderTop: '1px solid #f1f5f9' }}>
-                      <span style={{ fontSize: 12, color: 'var(--color-primary)', fontWeight: 600 }}>
-                        열기 →
-                      </span>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button
-                          className="btn-icon"
-                          onClick={(e) => { e.stopPropagation(); openEditFolder(fd); }}
-                          title="폴더 정보 수정"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          className="btn-icon"
-                          onClick={(e) => { e.stopPropagation(); openCopyFolder(fd); }}
-                          title="폴더와 하위 설비 복사"
-                        >
-                          <Copy size={14} />
-                        </button>
-                        <button
-                          className="btn-icon"
-                          onClick={(e) => { e.stopPropagation(); handleDeleteFolder(fd); }}
-                          title="폴더 삭제"
-                          style={{ color: 'var(--color-ng)' }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+          {/* 납품일이 지난 그룹은 '완료된 그룹'으로 자동 이동 */}
+          {completedFolders.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <button
+                type="button"
+                onClick={() => setShowCompletedFolders((v) => !v)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, fontSize: 15, fontWeight: 700, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit' }}
+              >
+                {completedOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                <CheckCircle size={18} color="var(--color-ok)" />
+                <span>완료된 그룹</span>
+                <span className="badge badge-na" style={{ fontSize: 11, marginLeft: 4 }}>{completedFolders.length}개</span>
+                <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--color-text-muted)' }}>납품일 지남</span>
+              </button>
+              {completedOpen && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 16 }}>
+                  {completedFolders.map((fd) => renderFolderCard(fd, true))}
+                </div>
+              )}
             </div>
           )}
         </div>

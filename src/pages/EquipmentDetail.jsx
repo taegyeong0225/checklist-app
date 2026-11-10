@@ -81,6 +81,7 @@ export default function EquipmentDetail() {
     if (!editForm.name.trim()) { addToast('설비명을 입력하세요.', 'error'); return; }
     try {
       await equipmentDB.put({ ...editForm });
+      window.dispatchEvent(new Event('equipment-updated'));
       addToast('설비 정보와 포함 모듈을 수정했습니다.', 'success');
       setShowEditModal(false);
       load();
