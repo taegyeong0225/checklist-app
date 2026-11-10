@@ -11,6 +11,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState({ total: 0, done: 0, ng: 0, pending: 0, folderCount: 0 });
   const [equipmentStats, setEquipmentStats] = useState([]);
   const [ngItems, setNgItems] = useState([]);
+  const [ngCategoryFilter, setNgCategoryFilter] = useState('all');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -64,6 +65,18 @@ export default function Dashboard() {
     });
   }
 
+  const ngCategories = [];
+  for (const { categoryName } of ngItems) {
+    const name = categoryName || '(미분류)';
+    const found = ngCategories.find((c) => c.name === name);
+    if (found) found.count++;
+    else ngCategories.push({ name, count: 1 });
+  }
+  const activeNgFilter = ngCategoryFilter !== 'all' && ngCategories.some((c) => c.name === ngCategoryFilter) ? ngCategoryFilter : 'all';
+  const filteredNgItems = activeNgFilter === 'all'
+    ? ngItems
+    : ngItems.filter(({ categoryName }) => (categoryName || '(미분류)') === activeNgFilter);
+
   return (
     <div>
       {/* 통계 카드 */}
@@ -95,15 +108,35 @@ export default function Dashboard() {
         <div className="card-header">
           <span className="card-title" style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
             <AlertTriangle size={18} color="var(--color-ng)" /> 전체 설비 이상 항목
-            <span className="badge badge-ng">{ngItems.length}</span>
+            <span className="badge badge-ng">{filteredNgItems.length}{activeNgFilter !== 'all' ? ` / ${ngItems.length}` : ''}</span>
           </span>
         </div>
+
+        {ngCategories.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+            <button
+              className={`btn btn-sm ${activeNgFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setNgCategoryFilter('all')}
+            >
+              전체 ({ngItems.length})
+            </button>
+            {ngCategories.map(({ name, count }) => (
+              <button
+                key={name}
+                className={`btn btn-sm ${activeNgFilter === name ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setNgCategoryFilter(name)}
+              >
+                {name} ({count})
+              </button>
+            ))}
+          </div>
+        )}
 
         {ngItems.length === 0 ? (
           <div style={{ padding: '8px 0', color: 'var(--color-text-muted)', fontSize: 14 }}>현재 기록된 이상 항목이 없습니다.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {ngItems.map(({ eq, parentFolder, cl, categoryName, item, result }) => (
+            {filteredNgItems.map(({ eq, parentFolder, cl, categoryName, item, result }) => (
               <button
                 key={`${cl.id}-${item.id}`}
                 className="btn btn-secondary"

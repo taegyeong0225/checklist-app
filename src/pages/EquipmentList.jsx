@@ -9,7 +9,8 @@ import {
   Server, ArrowLeft, CheckSquare, Square, ChevronDown, ChevronUp, Layers, Sparkles, Copy
 } from 'lucide-react';
 
-const EMPTY_FOLDER = { name: '', model: '', unit: '', line: '', location: '', deliveryDate: '', memo: '' };
+const FOLDER_INHERIT_FIELDS = ['model', 'unit', 'line', 'location'];
+const EMPTY_FOLDER ={ name: '', model: '', unit: '', line: '', location: '', deliveryDate: '', memo: '' };
 const EMPTY_EQUIPMENT = {
   name: '',
   model: '',
@@ -145,13 +146,40 @@ export default function EquipmentList() {
     setShowFolderModal(true);
   }
 
-  async function copyFolderContents(sourceFolderId, targetFolderId) {
+  // 폴더의 모델·호기·라인·위치가 바뀌면 하위 설비에도 반영
+  // (하위 설비 값이 비어 있거나 기존 폴더 값과 같을 때만 바꾸고, 개별로 다르게 입력한 값은 유지)
+  function inheritFolderFields(equipment, oldFolder, newFolder) {
+    const changes = {};
+    for (const field of FOLDER_INHERIT_FIELDS) {
+      const oldValue = oldFolder?.[field] || '';
+      const newValue = newFolder?.[field] || '';
+      const current = equipment[field] || '';
+      if (oldValue !== newValue && (current === '' || current === oldValue)) changes[field] = newValue;
+    }
+    return changes;
+  }
+
+  async function syncFolderChildren(oldFolder, newFolder) {
+    const children = equipments.filter((equipment) => equipment.folderId === oldFolder.id);
+    let count = 0;
+    for (const child of children) {
+      const changes = inheritFolderFields(child, oldFolder, newFolder);
+      if (Object.keys(changes).length === 0) continue;
+      await equipmentDB.put({ ...child, ...changes });
+      count++;
+    }
+    return count;
+  }
+
+  async function copyFolderContents(sourceFolder, targetFolderId, targetFolder) {
+    const sourceFolderId = sourceFolder.id;
     const sourceChecklists = await checklistDB.getAll();
     const sourceEquipments = equipments.filter((equipment) => equipment.folderId === sourceFolderId);
 
     for (const sourceEquipment of sourceEquipments) {
       const { id, createdAt, folderId, turnOnDate, ...equipmentData } = sourceEquipment;
-      const targetEquipmentId = await equipmentDB.add({ ...equipmentData, folderId: targetFolderId, turnOnDate: '' });
+      const inherited = inheritFolderFields(sourceEquipment, sourceFolder, targetFolder);
+      const targetEquipmentId = await equipmentDB.add({ ...equipmentData, ...inherited, folderId: targetFolderId, turnOnDate: '' });
       const equipmentChecklists = sourceChecklists.filter((checklist) => checklist.equipmentId === id);
 
       for (const sourceChecklist of equipmentChecklists) {
@@ -166,10 +194,11 @@ export default function EquipmentList() {
     try {
       if (editFolderItem) {
         await folderDB.put({ ...editFolderItem, ...folderForm });
-        addToast('폴더 정보를 수정했습니다.', 'success');
+        const synced = await syncFolderChildren(editFolderItem, folderForm);
+        addToast(synced > 0 ? `폴더 정보를 수정했고, 하위 설비 ${synced}대에도 반영했습니다.` : '폴더 정보를 수정했습니다.', 'success');
       } else {
         const folderId = await folderDB.add({ ...folderForm });
-        if (copySourceFolder) await copyFolderContents(copySourceFolder.id, folderId);
+        if (copySourceFolder) await copyFolderContents(copySourceFolder, folderId, folderForm);
         addToast(copySourceFolder ? '폴더와 하위 설비를 복사했습니다. 점검 결과는 포함하지 않았습니다.' : '메인 설비 폴더를 생성했습니다.', 'success');
       }
       await load();
