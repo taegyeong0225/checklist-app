@@ -277,6 +277,7 @@ export default function EquipmentDetail() {
           {equipment.line && <div><span style={{ color: 'var(--color-text-muted)' }}>라인: </span>{equipment.line}</div>}
           {equipment.location && <div><span style={{ color: 'var(--color-text-muted)' }}>위치: </span>{equipment.location}</div>}
           <div><span style={{ color: 'var(--color-text-muted)' }}>TURN ON: </span>{equipment.turnOnDate || '미설정'}</div>
+          <div><span style={{ color: 'var(--color-text-muted)' }}>프로그램 버전: </span>{equipment.programVersion || '미설정'}</div>
           <div>
             <span style={{ color: 'var(--color-text-muted)' }}>포함 모듈: </span>
             <strong style={{ color: 'var(--color-primary)' }}>
@@ -492,6 +493,16 @@ export default function EquipmentDetail() {
               <input className="form-input" type="date" value={editForm.turnOnDate || ''} onChange={(e) => setEditForm({ ...editForm, turnOnDate: e.target.value })} />
             </div>
 
+            <div className="form-group">
+              <label className="form-label">프로그램 버전</label>
+              <input className="form-input" type="date" value={editForm.programVersion || ''} onChange={(e) => setEditForm({ ...editForm, programVersion: e.target.value })} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">메모</label>
+              <input className="form-input" value={editForm.memo || ''} onChange={(e) => setEditForm({ ...editForm, memo: e.target.value })} />
+            </div>
+
             {/* 포함 모듈 선택 */}
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
@@ -605,11 +616,6 @@ export default function EquipmentDetail() {
                   })}
                 </div>
               )}
-            </div>
-
-            <div className="form-group" style={{ marginTop: 16 }}>
-              <label className="form-label">메모</label>
-              <textarea className="form-input" rows={2} value={editForm.memo || ''} onChange={(e) => setEditForm({ ...editForm, memo: e.target.value })} />
             </div>
 
             <div className="modal-footer">

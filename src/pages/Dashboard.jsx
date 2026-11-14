@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [equipmentStats, setEquipmentStats] = useState([]);
   const [ngItems, setNgItems] = useState([]);
   const [ngCategoryFilter, setNgCategoryFilter] = useState('all');
+  const [ngViewMode, setNgViewMode] = useState('item'); // 'item' | 'equipment'
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -77,6 +78,14 @@ export default function Dashboard() {
     ? ngItems
     : ngItems.filter(({ categoryName }) => (categoryName || '(미분류)') === activeNgFilter);
 
+  // 설비별 묶음 보기
+  const ngGroups = [];
+  for (const entry of filteredNgItems) {
+    const found = ngGroups.find((g) => g.eq.id === entry.eq.id);
+    if (found) found.items.push(entry);
+    else ngGroups.push({ eq: entry.eq, parentFolder: entry.parentFolder, items: [entry] });
+  }
+
   return (
     <div>
       {/* 통계 카드 */}
@@ -110,6 +119,12 @@ export default function Dashboard() {
             <AlertTriangle size={18} color="var(--color-ng)" /> 전체 설비 이상 항목
             <span className="badge badge-ng">{filteredNgItems.length}{activeNgFilter !== 'all' ? ` / ${ngItems.length}` : ''}</span>
           </span>
+          {ngItems.length > 0 && (
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button className={`btn btn-sm ${ngViewMode === 'item' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setNgViewMode('item')}>항목별</button>
+              <button className={`btn btn-sm ${ngViewMode === 'equipment' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setNgViewMode('equipment')}>설비별</button>
+            </div>
+          )}
         </div>
 
         {ngCategories.length > 0 && (
@@ -134,6 +149,38 @@ export default function Dashboard() {
 
         {ngItems.length === 0 ? (
           <div style={{ padding: '8px 0', color: 'var(--color-text-muted)', fontSize: 14 }}>현재 기록된 이상 항목이 없습니다.</div>
+        ) : ngViewMode === 'equipment' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {ngGroups.map(({ eq, parentFolder, items }) => (
+              <div key={eq.id} style={{ border: '1px solid #fecaca', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'var(--color-ng-bg, #fef2f2)', flexWrap: 'wrap' }}>
+                  <strong style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span title={eq.turnOnDate ? `TURN ON ${eq.turnOnDate}` : 'TURN ON 미설정'} style={{ width: 9, height: 9, borderRadius: '50%', background: eq.turnOnDate ? 'var(--color-ok)' : 'var(--color-ng)' }} />{eq.name}</strong>
+                  {parentFolder && <span style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>{parentFolder.name}</span>}
+                  <span className="badge badge-ng">{items.length}</span>
+                  <button className="btn btn-sm btn-secondary" style={{ marginLeft: 'auto' }} onClick={() => navigate(`/equipments/${eq.id}`)}>설비 보기 →</button>
+                </div>
+                {items.map(({ cl, categoryName, item, result }) => (
+                  <button
+                    key={`${cl.id}-${item.id}`}
+                    className="btn btn-secondary"
+                    style={{ width: '100%', justifyContent: 'flex-start', display: 'flex', alignItems: 'flex-start', gap: 10, textAlign: 'left', padding: '10px 14px', border: 'none', borderTop: '1px solid var(--color-border)', borderRadius: 0 }}
+                    onClick={() => navigate(`/equipments/${eq.id}/checklist/${cl.id}`)}
+                  >
+                    <AlertTriangle size={15} color="var(--color-ng)" style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span style={{ flex: 1 }}>
+                      <span style={{ fontSize: 14 }}>{categoryName} · {item.name}</span>
+                      {(result.note || result.inspector || result.updatedAt) && (
+                        <span style={{ display: 'block', marginTop: 3, color: 'var(--color-text-muted)', fontSize: 12 }}>
+                          {[result.note, result.inspector, result.updatedAt && formatDateTime(result.updatedAt)].filter(Boolean).join(' · ')}
+                        </span>
+                      )}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--color-primary)', whiteSpace: 'nowrap' }}>체크하기 →</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {filteredNgItems.map(({ eq, parentFolder, cl, categoryName, item, result }) => (

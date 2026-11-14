@@ -162,7 +162,7 @@ function EquipmentTitle({ label, equipmentId }) {
     };
   }, [equipmentId]);
 
-  const info = [equipment?.model, equipment?.unit && `${equipment.unit}호기`, equipment?.name].filter(Boolean).join(' · ');
+  const info = [equipment?.unit && `${equipment.unit}호기`, equipment?.name].filter(Boolean).join(' ');
 
   return (
     <span className="topbar-title" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

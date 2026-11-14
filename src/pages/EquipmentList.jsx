@@ -24,6 +24,7 @@ const EMPTY_EQUIPMENT = {
   line: '',
   location: '',
   turnOnDate: '',
+  programVersion: '',
   folderId: null,
   templateId: '',
   includedCategories: [],
@@ -880,6 +881,16 @@ export default function EquipmentList() {
               <input className="form-input" type="date" value={eqForm.turnOnDate || ''} onChange={(e) => setEqForm({ ...eqForm, turnOnDate: e.target.value })} />
             </div>
 
+            <div className="form-group">
+              <label className="form-label">프로그램 버전</label>
+              <input className="form-input" type="date" value={eqForm.programVersion || ''} onChange={(e) => setEqForm({ ...eqForm, programVersion: e.target.value })} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">메모</label>
+              <input className="form-input" value={eqForm.memo || ''} onChange={(e) => setEqForm({ ...eqForm, memo: e.target.value })} />
+            </div>
+
             {/* 포함 모듈/카테고리 선택 */}
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
@@ -993,11 +1004,6 @@ export default function EquipmentList() {
                   })}
                 </div>
               ) : null}
-            </div>
-
-            <div className="form-group" style={{ marginTop: 16 }}>
-              <label className="form-label">메모</label>
-              <textarea className="form-input" rows={2} value={eqForm.memo} onChange={(e) => setEqForm({ ...eqForm, memo: e.target.value })} placeholder="설비 특이사항 또는 메모" />
             </div>
 
             <div className="modal-footer">
